@@ -20,6 +20,13 @@ const WARD_LINE_LAYER_ID = "climagrid-wards-line";
 const HVI_DOMAIN: [number, number, number] = [0.2, 0.4, 0.6];
 const HVI_COLORS: [string, string, string] = ["#ffffb2", "#fd8d3c", "#bd0026"];
 
+function getFirstLabelLayerId(map: maplibregl.Map): string | undefined {
+  const layers = map.getStyle()?.layers;
+  if (!layers) return undefined;
+  const symbolLayer = layers.find((l) => l.type === "symbol");
+  return symbolLayer?.id;
+}
+
 function GridLayer({ layerId, grid }: { layerId: LayerId; grid: GridResponse | null }) {
   const { map, isLoaded } = useMap();
 
@@ -42,18 +49,19 @@ function GridLayer({ layerId, grid }: { layerId: LayerId; grid: GridResponse | n
       source.setData(featureCollection as GeoJSON.FeatureCollection);
     } else {
       map.addSource(GRID_SOURCE_ID, { type: "geojson", data: featureCollection as GeoJSON.FeatureCollection });
+      const beforeId = getFirstLabelLayerId(map);
       map.addLayer({
         id: GRID_FILL_LAYER_ID,
         type: "fill",
         source: GRID_SOURCE_ID,
-        paint: { "fill-opacity": 0.72 },
-      });
+        paint: { "fill-opacity": 0.6 },
+      }, beforeId);
       map.addLayer({
         id: GRID_LINE_LAYER_ID,
         type: "line",
         source: GRID_SOURCE_ID,
         paint: { "line-color": "rgba(0,0,0,0.08)", "line-width": 0.5 },
-      });
+      }, beforeId);
     }
   }, [map, isLoaded, grid, layerId]);
 
@@ -100,6 +108,7 @@ function VulnerabilityLayer({ visible, wards }: { visible: boolean; wards: Vulne
       );
     } else {
       map.addSource(WARD_SOURCE_ID, { type: "geojson", data: featureCollection as GeoJSON.FeatureCollection });
+      const beforeId = getFirstLabelLayerId(map);
       map.addLayer({
         id: WARD_FILL_LAYER_ID,
         type: "fill",
@@ -113,13 +122,13 @@ function VulnerabilityLayer({ visible, wards }: { visible: boolean; wards: Vulne
           ] as never,
           "fill-opacity": 0.35,
         },
-      });
+      }, beforeId);
       map.addLayer({
         id: WARD_LINE_LAYER_ID,
         type: "line",
         source: WARD_SOURCE_ID,
         paint: { "line-color": "#1f2937", "line-width": 1.5 },
-      });
+      }, beforeId);
     }
   }, [map, isLoaded, wards]);
 

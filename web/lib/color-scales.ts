@@ -16,8 +16,8 @@ export const LAYER_DEFS: { id: LayerId; label: string; unit: string }[] = [
 const RAMPS: Record<LayerId, { domain: [number, number, number]; colors: [string, string, string] }> = {
   lst_celsius: { domain: [26, 34, 42], colors: ["#2166ac", "#f7f7f7", "#b2182b"] },
   ndvi: { domain: [0, 0.4, 0.85], colors: ["#a50026", "#ffffbf", "#1a9850"] },
-  built_up_index: { domain: [0, 0.3, 1], colors: ["#fff7ec", "#fc8d59", "#7f0000"] },
-  traffic_density: { domain: [0, 0.3, 1], colors: ["#ffffe5", "#fe9929", "#993404"] },
+  built_up_index: { domain: [0, 0.3, 1], colors: ["#f2f0f7", "#9e9ac8", "#4a1486"] },
+  traffic_density: { domain: [0, 0.3, 1], colors: ["#f0f9e8", "#43a2ca", "#0868ac"] },
 };
 
 export function getLayerPaintExpression(layerId: LayerId): unknown {
