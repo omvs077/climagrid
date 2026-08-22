@@ -1,7 +1,7 @@
-﻿"""
-Database writes — the ONLY component with write access. All queries are
-parameterized (SECURITY.md §3), never string-built, even though this
-component is "trusted" — defense in depth costs nothing here.
+"""
+Database writes - the ONLY component with write access. All queries are
+parameterized (see SECURITY.md), never string-built, even though this
+component is "trusted" - defense in depth costs nothing here.
 """
 from __future__ import annotations
 
@@ -45,19 +45,21 @@ def finish_pipeline_run(conn, run_id: str, status: str, sources_used: dict, note
 
 
 def write_grid_cells(conn, run_id: str, city: str, cells: list) -> int:
-    """Writes this run's cells, then deletes the previous run's rows for this
-    city — the public API never sees a half-written state."""
+    """Writes this run's cells (including each cell's ward_id, so the API
+    can later derive ward boundaries via ST_Union), then deletes the
+    previous run's rows for this city - the public API never sees a
+    half-written state."""
     written = 0
     with conn.cursor() as cur:
         for cell in cells:
             cur.execute(
                 """
                 INSERT INTO spatial_grids
-                  (city, geom, avg_lst_celsius, ndvi, built_up_index, traffic_density, pipeline_run_id)
-                VALUES (%s, ST_GeomFromGeoJSON(%s), %s, %s, %s, %s, %s)
+                  (city, geom, avg_lst_celsius, ndvi, built_up_index, traffic_density, pipeline_run_id, ward_id)
+                VALUES (%s, ST_GeomFromGeoJSON(%s), %s, %s, %s, %s, %s, %s)
                 """,
                 (city, json.dumps(cell.to_geojson()), cell.lst_celsius, cell.ndvi,
-                 cell.built_up_index, cell.traffic_density, run_id),
+                 cell.built_up_index, cell.traffic_density, run_id, cell.ward_id),
             )
             written += 1
         cur.execute("DELETE FROM spatial_grids WHERE city=%s AND pipeline_run_id != %s", (city, run_id))

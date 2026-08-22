@@ -16,6 +16,7 @@ export interface GridResponse {
 export interface VulnerabilityWard {
   ward_id: string;
   hvi_score: number;
+  geometry: { type: "Polygon" | "MultiPolygon"; coordinates: unknown };
 }
 
 export interface VulnerabilityResponse {

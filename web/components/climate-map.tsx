@@ -3,26 +3,26 @@
 import { useEffect, useState } from "react";
 import { Map, MapControls, useMap } from "@/components/ui/map";
 import { Card } from "@/components/ui/card";
-import { fetchGrid, type GridResponse } from "@/lib/api";
+import { fetchGrid, fetchVulnerability, type GridResponse, type VulnerabilityResponse } from "@/lib/api";
 import { getLayerPaintExpression, LAYER_DEFS, type LayerId } from "@/lib/color-scales";
 
 const PUNE_CENTER: [number, number] = [73.845, 18.525];
 const PUNE_BBOX = "73.74,18.43,73.95,18.62";
 
-const SOURCE_ID = "climagrid-grid";
-const FILL_LAYER_ID = "climagrid-grid-fill";
-const LINE_LAYER_ID = "climagrid-grid-line";
+const GRID_SOURCE_ID = "climagrid-grid";
+const GRID_FILL_LAYER_ID = "climagrid-grid-fill";
+const GRID_LINE_LAYER_ID = "climagrid-grid-line";
 
-/**
- * Renders the grid as a single GeoJSON source + fill/line layer pair on the
- * raw MapLibre instance (via useMap()) - not DOM markers. With ~400 cells
- * this keeps rendering on the WebGL canvas, matching mapcn's own guidance
- * for anything beyond a handful of features.
- */
+const WARD_SOURCE_ID = "climagrid-wards";
+const WARD_FILL_LAYER_ID = "climagrid-wards-fill";
+const WARD_LINE_LAYER_ID = "climagrid-wards-line";
+
+const HVI_DOMAIN: [number, number, number] = [0.2, 0.4, 0.6];
+const HVI_COLORS: [string, string, string] = ["#ffffb2", "#fd8d3c", "#bd0026"];
+
 function GridLayer({ layerId, grid }: { layerId: LayerId; grid: GridResponse | null }) {
   const { map, isLoaded } = useMap();
 
-  // Create the source/layers once map is ready and data has arrived.
   useEffect(() => {
     if (!map || !isLoaded || !grid) return;
 
@@ -37,41 +37,108 @@ function GridLayer({ layerId, grid }: { layerId: LayerId; grid: GridResponse | n
         })),
     };
 
-    const source = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+    const source = map.getSource(GRID_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
     if (source) {
       source.setData(featureCollection as GeoJSON.FeatureCollection);
     } else {
-      map.addSource(SOURCE_ID, { type: "geojson", data: featureCollection as GeoJSON.FeatureCollection });
+      map.addSource(GRID_SOURCE_ID, { type: "geojson", data: featureCollection as GeoJSON.FeatureCollection });
       map.addLayer({
-        id: FILL_LAYER_ID,
+        id: GRID_FILL_LAYER_ID,
         type: "fill",
-        source: SOURCE_ID,
+        source: GRID_SOURCE_ID,
         paint: { "fill-opacity": 0.72 },
       });
       map.addLayer({
-        id: LINE_LAYER_ID,
+        id: GRID_LINE_LAYER_ID,
         type: "line",
-        source: SOURCE_ID,
+        source: GRID_SOURCE_ID,
         paint: { "line-color": "rgba(0,0,0,0.08)", "line-width": 0.5 },
       });
     }
   }, [map, isLoaded, grid, layerId]);
 
-  // Swap the fill color expression whenever the active layer changes -
-  // cheap, no need to rebuild the source.
   useEffect(() => {
-    if (!map || !map.getLayer(FILL_LAYER_ID)) return;
-    map.setPaintProperty(FILL_LAYER_ID, "fill-color", getLayerPaintExpression(layerId) as never);
+    if (!map || !map.getLayer(GRID_FILL_LAYER_ID)) return;
+    map.setPaintProperty(GRID_FILL_LAYER_ID, "fill-color", getLayerPaintExpression(layerId) as never);
   }, [map, layerId]);
 
-  // Clean up on unmount only - avoids flicker when just switching layers.
   useEffect(() => {
     return () => {
       if (!map) return;
-      [FILL_LAYER_ID, LINE_LAYER_ID].forEach((id) => {
+      [GRID_FILL_LAYER_ID, GRID_LINE_LAYER_ID].forEach((id) => {
         if (map.getLayer(id)) map.removeLayer(id);
       });
-      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      if (map.getSource(GRID_SOURCE_ID)) map.removeSource(GRID_SOURCE_ID);
+    };
+  }, [map]);
+
+  return null;
+}
+
+/**
+ * Ward-level HVI choropleth overlay - independent on/off toggle, sits above
+ * whichever base grid layer is active.
+ */
+function VulnerabilityLayer({ visible, wards }: { visible: boolean; wards: VulnerabilityResponse | null }) {
+  const { map, isLoaded } = useMap();
+
+  useEffect(() => {
+    if (!map || !isLoaded || !wards) return;
+
+    const featureCollection = {
+      type: "FeatureCollection" as const,
+      features: wards.wards.map((w) => ({
+        type: "Feature" as const,
+        properties: { hvi: w.hvi_score, ward_id: w.ward_id },
+        geometry: w.geometry,
+      })),
+    };
+
+    if (map.getSource(WARD_SOURCE_ID)) {
+      (map.getSource(WARD_SOURCE_ID) as maplibregl.GeoJSONSource).setData(
+        featureCollection as GeoJSON.FeatureCollection
+      );
+    } else {
+      map.addSource(WARD_SOURCE_ID, { type: "geojson", data: featureCollection as GeoJSON.FeatureCollection });
+      map.addLayer({
+        id: WARD_FILL_LAYER_ID,
+        type: "fill",
+        source: WARD_SOURCE_ID,
+        paint: {
+          "fill-color": [
+            "interpolate", ["linear"], ["get", "hvi"],
+            HVI_DOMAIN[0], HVI_COLORS[0],
+            HVI_DOMAIN[1], HVI_COLORS[1],
+            HVI_DOMAIN[2], HVI_COLORS[2],
+          ] as never,
+          "fill-opacity": 0.35,
+        },
+      });
+      map.addLayer({
+        id: WARD_LINE_LAYER_ID,
+        type: "line",
+        source: WARD_SOURCE_ID,
+        paint: { "line-color": "#1f2937", "line-width": 1.5 },
+      });
+    }
+  }, [map, isLoaded, wards]);
+
+  useEffect(() => {
+    if (!map) return;
+    [WARD_FILL_LAYER_ID, WARD_LINE_LAYER_ID].forEach((id) => {
+      if (map.getLayer(id)) {
+        map.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
+      }
+    });
+  }, [map, visible]);
+
+  useEffect(() => {
+    return () => {
+      if (!map) return;
+      [WARD_FILL_LAYER_ID, WARD_LINE_LAYER_ID].forEach((id) => {
+        if (map.getLayer(id)) map.removeLayer(id);
+      });
+      if (map.getSource(WARD_SOURCE_ID)) map.removeSource(WARD_SOURCE_ID);
     };
   }, [map]);
 
@@ -80,16 +147,21 @@ function GridLayer({ layerId, grid }: { layerId: LayerId; grid: GridResponse | n
 
 export function ClimateMap() {
   const [activeLayer, setActiveLayer] = useState<LayerId>("lst_celsius");
+  const [showVulnerability, setShowVulnerability] = useState(false);
   const [grid, setGrid] = useState<GridResponse | null>(null);
+  const [vulnerability, setVulnerability] = useState<VulnerabilityResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetchGrid(PUNE_BBOX, "pune")
-      .then((data) => {
-        if (!cancelled) setGrid(data);
+    Promise.all([fetchGrid(PUNE_BBOX, "pune"), fetchVulnerability("pune")])
+      .then(([gridData, vulnData]) => {
+        if (!cancelled) {
+          setGrid(gridData);
+          setVulnerability(vulnData);
+        }
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load data");
@@ -108,6 +180,7 @@ export function ClimateMap() {
         <Map center={PUNE_CENTER} zoom={11.5}>
           <MapControls />
           <GridLayer layerId={activeLayer} grid={grid} />
+          <VulnerabilityLayer visible={showVulnerability} wards={vulnerability} />
         </Map>
       </Card>
 
@@ -124,6 +197,17 @@ export function ClimateMap() {
             {l.label}
           </button>
         ))}
+
+        <div className="mt-2 border-t pt-2">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={showVulnerability}
+              onChange={(e) => setShowVulnerability(e.target.checked)}
+            />
+            Ward Vulnerability (HVI)
+          </label>
+        </div>
       </div>
 
       {loading && (
