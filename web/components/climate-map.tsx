@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 import { Map, MapControls, useMap } from "@/components/ui/map";
 import { Card } from "@/components/ui/card";
 import { fetchGrid, fetchVulnerability, type GridResponse, type VulnerabilityResponse } from "@/lib/api";
@@ -40,7 +42,13 @@ function GridLayer({ layerId, grid, theme }: { layerId: LayerId; grid: GridRespo
         .filter((c) => c[layerId] !== null)
         .map((c) => ({
           type: "Feature" as const,
-          properties: { value: c[layerId] },
+          properties: {
+            value: c[layerId],
+            lst_celsius: c.lst_celsius,
+            ndvi: c.ndvi,
+            built_up_index: c.built_up_index,
+            traffic_density: c.traffic_density,
+          },
           geometry: c.geometry,
         })),
     };
@@ -75,6 +83,47 @@ function GridLayer({ layerId, grid, theme }: { layerId: LayerId; grid: GridRespo
     if (!map || !map.getLayer(GRID_FILL_LAYER_ID)) return;
     map.setPaintProperty(GRID_FILL_LAYER_ID, "fill-opacity", getGridFillOpacity(theme));
   }, [map, theme]);
+
+  useEffect(() => {
+    if (!map || !map.getLayer(GRID_FILL_LAYER_ID)) return;
+
+    const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12 });
+
+    const fmt = (v: number | null | undefined, digits: number) =>
+      v === null || v === undefined ? "\u2013" : v.toFixed(digits);
+
+    const handleMouseMove = (e: maplibregl.MapLayerMouseEvent) => {
+      const feature = e.features?.[0];
+      if (!feature) return;
+      map.getCanvas().style.cursor = "pointer";
+      const p = feature.properties as Record<string, number | null>;
+      popup
+        .setLngLat(e.lngLat)
+        .setHTML(
+          `<div style="font-size:12px;line-height:1.5;min-width:150px;background:#18181b;color:#f4f4f5;border:1px solid #3f3f46;border-radius:8px;padding:10px 12px;box-shadow:0 4px 12px rgba(0,0,0,0.35);">
+            <div><strong>Temperature:</strong> ${fmt(p.lst_celsius, 1)}\u00b0C</div>
+            <div><strong>Vegetation (NDVI):</strong> ${fmt(p.ndvi, 2)}</div>
+            <div><strong>Built-up density:</strong> ${fmt(p.built_up_index, 2)}</div>
+            <div><strong>Road density:</strong> ${fmt(p.traffic_density, 2)}</div>
+          </div>`
+        )
+        .addTo(map);
+    };
+
+    const handleMouseLeave = () => {
+      map.getCanvas().style.cursor = "";
+      popup.remove();
+    };
+
+    map.on("mousemove", GRID_FILL_LAYER_ID, handleMouseMove);
+    map.on("mouseleave", GRID_FILL_LAYER_ID, handleMouseLeave);
+
+    return () => {
+      map.off("mousemove", GRID_FILL_LAYER_ID, handleMouseMove);
+      map.off("mouseleave", GRID_FILL_LAYER_ID, handleMouseLeave);
+      popup.remove();
+    };
+  }, [map, isLoaded, grid]);
 
   useEffect(() => {
     return () => {
@@ -149,6 +198,42 @@ function VulnerabilityLayer({ visible, wards, theme }: { visible: boolean; wards
       }
     });
   }, [map, visible]);
+
+  useEffect(() => {
+    if (!map || !visible || !map.getLayer(WARD_FILL_LAYER_ID)) return;
+
+    const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12 });
+
+    const handleMouseMove = (e: maplibregl.MapLayerMouseEvent) => {
+      const feature = e.features?.[0];
+      if (!feature) return;
+      map.getCanvas().style.cursor = "pointer";
+      const p = feature.properties as { ward_id: string; hvi: number };
+      popup
+        .setLngLat(e.lngLat)
+        .setHTML(
+          `<div style="font-size:12px;line-height:1.5;min-width:130px;background:#18181b;color:#f4f4f5;border:1px solid #3f3f46;border-radius:8px;padding:10px 12px;box-shadow:0 4px 12px rgba(0,0,0,0.35);">
+            <div><strong>Ward:</strong> ${p.ward_id}</div>
+            <div><strong>HVI score:</strong> ${p.hvi.toFixed(3)}</div>
+          </div>`
+        )
+        .addTo(map);
+    };
+
+    const handleMouseLeave = () => {
+      map.getCanvas().style.cursor = "";
+      popup.remove();
+    };
+
+    map.on("mousemove", WARD_FILL_LAYER_ID, handleMouseMove);
+    map.on("mouseleave", WARD_FILL_LAYER_ID, handleMouseLeave);
+
+    return () => {
+      map.off("mousemove", WARD_FILL_LAYER_ID, handleMouseMove);
+      map.off("mouseleave", WARD_FILL_LAYER_ID, handleMouseLeave);
+      popup.remove();
+    };
+  }, [map, isLoaded, wards, visible]);
 
   useEffect(() => {
     return () => {
