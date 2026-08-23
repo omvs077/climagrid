@@ -1,4 +1,4 @@
-﻿import os
+import os
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -14,12 +14,12 @@ CITY_BBOXES = {
 }
 
 # Grid cell size in degrees (~1km near this latitude).
-GRID_CELL_SIZE_DEG = 0.01
+GRID_CELL_SIZE_DEG = 0.005
 
 # Grid cells per side aggregated into one "ward" for vulnerability_scores.
 # Placeholder simplification — real ward boundaries would come from OSM
 # admin polygons or a municipal shapefile in a future iteration.
-WARD_BLOCK_SIZE = 4
+WARD_BLOCK_SIZE = 8
 
 MODEL_VERSION = "hvi-v1"
 

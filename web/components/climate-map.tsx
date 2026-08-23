@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { Map, MapControls, useMap } from "@/components/ui/map";
 import { Card } from "@/components/ui/card";
 import { fetchGrid, fetchVulnerability, type GridResponse, type VulnerabilityResponse } from "@/lib/api";
-import { getLayerPaintExpression, LAYER_DEFS, type LayerId } from "@/lib/color-scales";
+import { getLayerPaintExpression, LAYER_DEFS, getGridFillOpacity, getWardFillOpacity, type LayerId, type MapTheme } from "@/lib/color-scales";
+import { Legend, HviLegend } from "@/components/legend";
 
 const PUNE_CENTER: [number, number] = [73.845, 18.525];
 const PUNE_BBOX = "73.74,18.43,73.95,18.62";
@@ -27,7 +28,7 @@ function getFirstLabelLayerId(map: maplibregl.Map): string | undefined {
   return symbolLayer?.id;
 }
 
-function GridLayer({ layerId, grid }: { layerId: LayerId; grid: GridResponse | null }) {
+function GridLayer({ layerId, grid, theme }: { layerId: LayerId; grid: GridResponse | null; theme: MapTheme }) {
   const { map, isLoaded } = useMap();
 
   useEffect(() => {
@@ -54,7 +55,7 @@ function GridLayer({ layerId, grid }: { layerId: LayerId; grid: GridResponse | n
         id: GRID_FILL_LAYER_ID,
         type: "fill",
         source: GRID_SOURCE_ID,
-        paint: { "fill-opacity": 0.6 },
+        paint: { "fill-opacity": getGridFillOpacity(theme) },
       }, beforeId);
       map.addLayer({
         id: GRID_LINE_LAYER_ID,
@@ -63,12 +64,17 @@ function GridLayer({ layerId, grid }: { layerId: LayerId; grid: GridResponse | n
         paint: { "line-color": "rgba(0,0,0,0.08)", "line-width": 0.5 },
       }, beforeId);
     }
-  }, [map, isLoaded, grid, layerId]);
+  }, [map, isLoaded, grid, layerId, theme]);
 
   useEffect(() => {
     if (!map || !map.getLayer(GRID_FILL_LAYER_ID)) return;
-    map.setPaintProperty(GRID_FILL_LAYER_ID, "fill-color", getLayerPaintExpression(layerId) as never);
-  }, [map, layerId]);
+    map.setPaintProperty(GRID_FILL_LAYER_ID, "fill-color", getLayerPaintExpression(layerId, theme) as never);
+  }, [map, layerId, theme]);
+
+  useEffect(() => {
+    if (!map || !map.getLayer(GRID_FILL_LAYER_ID)) return;
+    map.setPaintProperty(GRID_FILL_LAYER_ID, "fill-opacity", getGridFillOpacity(theme));
+  }, [map, theme]);
 
   useEffect(() => {
     return () => {
@@ -87,7 +93,7 @@ function GridLayer({ layerId, grid }: { layerId: LayerId; grid: GridResponse | n
  * Ward-level HVI choropleth overlay - independent on/off toggle, sits above
  * whichever base grid layer is active.
  */
-function VulnerabilityLayer({ visible, wards }: { visible: boolean; wards: VulnerabilityResponse | null }) {
+function VulnerabilityLayer({ visible, wards, theme }: { visible: boolean; wards: VulnerabilityResponse | null; theme: MapTheme }) {
   const { map, isLoaded } = useMap();
 
   useEffect(() => {
@@ -109,10 +115,12 @@ function VulnerabilityLayer({ visible, wards }: { visible: boolean; wards: Vulne
     } else {
       map.addSource(WARD_SOURCE_ID, { type: "geojson", data: featureCollection as GeoJSON.FeatureCollection });
       const beforeId = getFirstLabelLayerId(map);
+      const initialVisibility = visible ? "visible" : "none";
       map.addLayer({
         id: WARD_FILL_LAYER_ID,
         type: "fill",
         source: WARD_SOURCE_ID,
+        layout: { visibility: initialVisibility },
         paint: {
           "fill-color": [
             "interpolate", ["linear"], ["get", "hvi"],
@@ -120,17 +128,18 @@ function VulnerabilityLayer({ visible, wards }: { visible: boolean; wards: Vulne
             HVI_DOMAIN[1], HVI_COLORS[1],
             HVI_DOMAIN[2], HVI_COLORS[2],
           ] as never,
-          "fill-opacity": 0.35,
+          "fill-opacity": getWardFillOpacity(theme),
         },
       }, beforeId);
       map.addLayer({
         id: WARD_LINE_LAYER_ID,
         type: "line",
         source: WARD_SOURCE_ID,
+        layout: { visibility: initialVisibility },
         paint: { "line-color": "#1f2937", "line-width": 1.5 },
       }, beforeId);
     }
-  }, [map, isLoaded, wards]);
+  }, [map, isLoaded, wards, visible, theme]);
 
   useEffect(() => {
     if (!map) return;
@@ -157,6 +166,7 @@ function VulnerabilityLayer({ visible, wards }: { visible: boolean; wards: Vulne
 export function ClimateMap() {
   const [activeLayer, setActiveLayer] = useState<LayerId>("lst_celsius");
   const [showVulnerability, setShowVulnerability] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [grid, setGrid] = useState<GridResponse | null>(null);
   const [vulnerability, setVulnerability] = useState<VulnerabilityResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -186,10 +196,10 @@ export function ClimateMap() {
   return (
     <div className="relative h-full w-full">
       <Card className="h-full w-full p-0 overflow-hidden">
-        <Map center={PUNE_CENTER} zoom={11.5}>
+        <Map center={PUNE_CENTER} zoom={11.5} theme={theme}>
           <MapControls />
-          <GridLayer layerId={activeLayer} grid={grid} />
-          <VulnerabilityLayer visible={showVulnerability} wards={vulnerability} />
+          <GridLayer layerId={activeLayer} grid={grid} theme={theme} />
+          <VulnerabilityLayer visible={showVulnerability} wards={vulnerability} theme={theme} />
         </Map>
       </Card>
 
@@ -217,6 +227,24 @@ export function ClimateMap() {
             Ward Vulnerability (HVI)
           </label>
         </div>
+
+        <div className="mt-2 border-t pt-2">
+          <button
+            onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+            className="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+          >
+            {theme === "dark" ? "Switch to Light Map" : "Switch to Dark Map"}
+          </button>
+        </div>
+      </div>
+
+      <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
+        <Legend
+          layerId={activeLayer}
+          unit={LAYER_DEFS.find((l) => l.id === activeLayer)?.unit ?? ""}
+          theme={theme}
+        />
+        {showVulnerability && <HviLegend domain={HVI_DOMAIN} colors={HVI_COLORS} />}
       </div>
 
       {loading && (

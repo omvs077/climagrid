@@ -4,6 +4,7 @@ Builds a regular grid over a city bbox, attaches layer values from each
 source, and computes a simplified heat-vulnerability index (HVI).
 """
 from __future__ import annotations
+import config
 
 import math
 from dataclasses import dataclass
@@ -34,7 +35,7 @@ class GridCell:
 
     @property
     def ward_id(self) -> str:
-        return f"W-{self.row // 4}-{self.col // 4}"
+        return f"W-{self.row // config.WARD_BLOCK_SIZE}-{self.col // config.WARD_BLOCK_SIZE}"
 
     def to_geojson(self) -> dict:
         return mapping(self.polygon)
