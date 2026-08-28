@@ -128,6 +128,10 @@ def compute_density_by_cell(elements, rows: int, cols: int, bbox) -> dict[tuple[
         counts[(row, col)] = counts.get((row, col), 0) + 1
 
     if not counts:
-        return {}
+        return {(r, c): 0.0 for r in range(rows) for c in range(cols)}
     max_count = max(counts.values())
-    return {key: round(count / max_count, 3) for key, count in counts.items()}
+    return {
+        (r, c): round(counts.get((r, c), 0) / max_count, 3)
+        for r in range(rows)
+        for c in range(cols)
+    }
