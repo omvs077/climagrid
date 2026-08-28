@@ -1,4 +1,4 @@
-﻿"""
+"""
 ClimaGrid pipeline entry point. Scheduled job (GitHub Actions cron) — never
 internet-facing, only initiates outbound calls. See ARCHITECTURE.md §5.
 
@@ -14,7 +14,8 @@ import sys
 
 import config
 import fusion
-from db import finish_pipeline_run, get_connection, start_pipeline_run, write_grid_cells, write_vulnerability_scores
+import interpolate
+from db import finish_pipeline_run, get_connection, start_pipeline_run, write_grid_cells, write_interpolated_raster, write_vulnerability_scores
 from sources import gee, openmeteo, overpass
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -68,11 +69,27 @@ def run(city: str, force_mock: bool) -> None:
     hvi_scores = fusion.compute_hvi(valid_cells)
     logger.info("Computed HVI for %d wards", len(hvi_scores))
 
+    raster_layers = ["lst_celsius", "ndvi", "built_up_index", "traffic_density"]
+    rasters = {}
+    for layer_name in raster_layers:
+        points = [
+            (*c.centroid, getattr(c, layer_name))
+            for c in valid_cells
+            if getattr(c, layer_name) is not None
+        ]
+        if points:
+            rasters[layer_name] = interpolate.interpolate_layer(points, bbox)
+        else:
+            logger.warning("No valid points for layer %s - skipping raster", layer_name)
+
     with get_connection(config.DATABASE_URL) as conn:
         run_id = start_pipeline_run(conn, city)
         try:
             n_cells = write_grid_cells(conn, run_id, city, valid_cells)
             n_scores = write_vulnerability_scores(conn, run_id, city, config.MODEL_VERSION, hvi_scores)
+            for layer_name, raster in rasters.items():
+                write_interpolated_raster(conn, run_id, city, layer_name, raster)
+            logger.info("Wrote %d interpolated rasters", len(rasters))
             status = "partial" if rejected else "success"
             finish_pipeline_run(conn, run_id, status, sources_used,
                                  notes=f"wrote {n_cells} cells, {n_scores} ward scores, {rejected} rejected")

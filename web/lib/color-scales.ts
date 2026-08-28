@@ -45,6 +45,44 @@ export function getLayerRamp(layerId: LayerId, theme: MapTheme = "dark"): Ramp {
   return ramps(theme)[layerId];
 }
 
+// Hex -> [r,g,b] once per call; small enough that a lookup cache isn't
+// worth the complexity here (raster canvas rendering calls this per pixel,
+// but only 3 colors per layer, so the browser's own JIT handles it fine).
+function hexToRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.replace("#", ""), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+/**
+ * Plain-JS equivalent of getLayerPaintExpression's MapLibre "interpolate"/
+ * "linear" expression - used by canvas-based rendering (RasterLayer) where
+ * there's no MapLibre paint pipeline to lean on. Must stay mathematically
+ * identical to the MapLibre expression so grid view and smooth view show
+ * the same color for the same value.
+ */
+export function getColorForValue(layerId: LayerId, value: number, theme: MapTheme = "dark"): [number, number, number] {
+  const { domain, colors } = getLayerRamp(layerId, theme);
+  const rgbs = colors.map(hexToRgb);
+
+  if (value <= domain[0]) return rgbs[0];
+  if (value >= domain[2]) return rgbs[2];
+
+  const [lo, mid, hi] = domain;
+  const [c0, c1, c2] = rgbs;
+
+  if (value <= mid) {
+    const t = (value - lo) / (mid - lo);
+    return [lerp(c0[0], c1[0], t), lerp(c0[1], c1[1], t), lerp(c0[2], c1[2], t)];
+  } else {
+    const t = (value - mid) / (hi - mid);
+    return [lerp(c1[0], c2[0], t), lerp(c1[1], c2[1], t), lerp(c1[2], c2[2], t)];
+  }
+}
+
 export function getLayerPaintExpression(layerId: LayerId, theme: MapTheme = "dark"): unknown {
   const { domain, colors } = getLayerRamp(layerId, theme);
   return [

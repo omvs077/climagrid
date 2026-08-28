@@ -38,6 +38,10 @@ export const layersSchema = z
     val ? val.split(",").filter((l) => ["lst", "ndvi", "built_up", "traffic"].includes(l)) : ["lst", "ndvi", "built_up", "traffic"]
   );
 
+export const rasterLayerSchema = z.enum(["lst_celsius", "ndvi", "built_up_index", "traffic_density"], {
+  message: "layer must be one of lst_celsius, ndvi, built_up_index, traffic_density",
+});
+
 export function errorResponse(code: string, message: string, status: number) {
   return Response.json({ error: { code, message } }, { status });
 }

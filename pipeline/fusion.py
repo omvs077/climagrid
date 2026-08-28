@@ -34,6 +34,10 @@ class GridCell:
         ])
 
     @property
+    def centroid(self) -> tuple[float, float]:
+        return ((self.minx + self.maxx) / 2, (self.miny + self.maxy) / 2)
+
+    @property
     def ward_id(self) -> str:
         return f"W-{self.row // config.WARD_BLOCK_SIZE}-{self.col // config.WARD_BLOCK_SIZE}"
 

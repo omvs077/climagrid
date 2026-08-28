@@ -67,6 +67,27 @@ def write_grid_cells(conn, run_id: str, city: str, cells: list) -> int:
     return written
 
 
+def write_interpolated_raster(conn, run_id: str, city: str, layer_name: str, raster: dict) -> None:
+    min_lon, min_lat, max_lon, max_lat = raster["bbox"]
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO interpolated_rasters
+              (city, layer_name, rows, cols, min_lon, min_lat, max_lon, max_lat, values, pipeline_run_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (city, layer_name) DO UPDATE
+              SET rows=EXCLUDED.rows, cols=EXCLUDED.cols,
+                  min_lon=EXCLUDED.min_lon, min_lat=EXCLUDED.min_lat,
+                  max_lon=EXCLUDED.max_lon, max_lat=EXCLUDED.max_lat,
+                  values=EXCLUDED.values, pipeline_run_id=EXCLUDED.pipeline_run_id,
+                  computed_at=now()
+            """,
+            (city, layer_name, raster["rows"], raster["cols"],
+             min_lon, min_lat, max_lon, max_lat, raster["values"], run_id),
+        )
+    conn.commit()
+
+
 def write_vulnerability_scores(conn, run_id: str, city: str, model_version: str, scores: dict) -> int:
     written = 0
     with conn.cursor() as cur:

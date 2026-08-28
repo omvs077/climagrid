@@ -5,16 +5,12 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Map, MapControls, useMap } from "@/components/ui/map";
 import { Card } from "@/components/ui/card";
-import { fetchGrid, fetchVulnerability, type GridResponse, type VulnerabilityResponse } from "@/lib/api";
-import { getLayerPaintExpression, LAYER_DEFS, getGridFillOpacity, getWardFillOpacity, type LayerId, type MapTheme } from "@/lib/color-scales";
+import { fetchGrid, fetchVulnerability, fetchRaster, type GridCell, type GridResponse, type VulnerabilityResponse } from "@/lib/api";
+import { getColorForValue, LAYER_DEFS, getWardFillOpacity, type LayerId, type MapTheme } from "@/lib/color-scales";
 import { Legend, HviLegend } from "@/components/legend";
 
 const PUNE_CENTER: [number, number] = [73.845, 18.525];
 const PUNE_BBOX = "73.74,18.43,73.95,18.62";
-
-const GRID_SOURCE_ID = "climagrid-grid";
-const GRID_FILL_LAYER_ID = "climagrid-grid-fill";
-const GRID_LINE_LAYER_ID = "climagrid-grid-line";
 
 const WARD_SOURCE_ID = "climagrid-wards";
 const WARD_FILL_LAYER_ID = "climagrid-wards-fill";
@@ -55,30 +51,13 @@ function enhanceBasemapContrast(map: maplibregl.Map, theme: MapTheme) {
   for (const layer of style.layers) {
     try {
       if (layer.type === "fill" && /building/i.test(layer.id)) {
-        map.setPaintProperty(
-          layer.id,
-          "fill-color",
-          isDark ? "rgba(58,58,64,0.9)" : "rgba(200,196,188,0.9)"
-        );
-        map.setPaintProperty(
-          layer.id,
-          "fill-outline-color",
-          isDark ? "rgba(95,95,102,0.6)" : "rgba(150,146,138,0.7)"
-        );
+        map.setPaintProperty(layer.id, "fill-color", isDark ? "rgba(58,58,64,0.9)" : "rgba(200,196,188,0.9)");
+        map.setPaintProperty(layer.id, "fill-outline-color", isDark ? "rgba(95,95,102,0.6)" : "rgba(150,146,138,0.7)");
       } else if (layer.type === "fill" && /landuse|landcover|residential/i.test(layer.id)) {
         map.setPaintProperty(layer.id, "fill-opacity", isDark ? 0.55 : 0.6);
       } else if (layer.type === "line" && /highway|road|street|transportation/i.test(layer.id)) {
-        map.setPaintProperty(
-          layer.id,
-          "line-color",
-          isDark ? "rgba(150,150,156,0.85)" : "rgba(255,255,255,0.9)"
-        );
+        map.setPaintProperty(layer.id, "line-color", isDark ? "rgba(150,150,156,0.85)" : "rgba(255,255,255,0.9)");
       } else if (layer.type === "symbol") {
-        // No ID filtering here: place names, street names, and POI labels
-        // all use different, inconsistent ID patterns across style versions
-        // (e.g. "highway_name_other" has neither "place" nor "label" in its
-        // ID), so every symbol layer gets the same bold, high-contrast text
-        // treatment rather than trying to guess which IDs are labels.
         map.setPaintProperty(layer.id, "text-color", isDark ? "#ffffff" : "#000000");
         map.setPaintProperty(layer.id, "text-halo-color", isDark ? "#000000" : "#ffffff");
         map.setPaintProperty(layer.id, "text-halo-width", 1.6);
@@ -101,77 +80,9 @@ function BasemapEnhancer({ theme }: { theme: MapTheme }) {
   return null;
 }
 
-
-function GridLayer({ layerId, grid, theme }: { layerId: LayerId; grid: GridResponse | null; theme: MapTheme }) {
-  const { map, isLoaded } = useMap();
-
-  useEffect(() => {
-    if (!map || !isLoaded || !grid) return;
-
-    const featureCollection = {
-      type: "FeatureCollection" as const,
-      features: grid.cells
-        .filter((c) => c[layerId] !== null)
-        .map((c) => ({
-          type: "Feature" as const,
-          properties: {
-            value: c[layerId],
-            lst_celsius: c.lst_celsius,
-            ndvi: c.ndvi,
-            built_up_index: c.built_up_index,
-            traffic_density: c.traffic_density,
-          },
-          geometry: c.geometry,
-        })),
-    };
-
-    const source = map.getSource(GRID_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
-    if (source) {
-      source.setData(featureCollection as GeoJSON.FeatureCollection);
-    } else {
-      map.addSource(GRID_SOURCE_ID, { type: "geojson", data: featureCollection as GeoJSON.FeatureCollection });
-      const beforeId = getFirstLabelLayerId(map);
-      map.addLayer({
-        id: GRID_FILL_LAYER_ID,
-        type: "fill",
-        source: GRID_SOURCE_ID,
-        paint: { "fill-opacity": getGridFillOpacity(theme) },
-      }, beforeId);
-      map.addLayer({
-        id: GRID_LINE_LAYER_ID,
-        type: "line",
-        source: GRID_SOURCE_ID,
-        paint: { "line-color": "rgba(0,0,0,0.08)", "line-width": 0.5 },
-      }, beforeId);
-    }
-  }, [map, isLoaded, grid, layerId, theme]);
-
-  useEffect(() => {
-    if (!map || !map.getLayer(GRID_FILL_LAYER_ID)) return;
-    map.setPaintProperty(GRID_FILL_LAYER_ID, "fill-color", getLayerPaintExpression(layerId, theme) as never);
-  }, [map, layerId, theme]);
-
-  useEffect(() => {
-    if (!map || !map.getLayer(GRID_FILL_LAYER_ID)) return;
-    map.setPaintProperty(GRID_FILL_LAYER_ID, "fill-opacity", getGridFillOpacity(theme));
-  }, [map, theme]);
-
-  useEffect(() => {
-    return () => {
-      if (!map) return;
-      [GRID_FILL_LAYER_ID, GRID_LINE_LAYER_ID].forEach((id) => {
-        if (map.getLayer(id)) map.removeLayer(id);
-      });
-      if (map.getSource(GRID_SOURCE_ID)) map.removeSource(GRID_SOURCE_ID);
-    };
-  }, [map]);
-
-  return null;
-}
-
 /**
  * Ward-level HVI choropleth overlay - independent on/off toggle, sits above
- * whichever base grid layer is active.
+ * the smooth heat surface.
  */
 function VulnerabilityLayer({ visible, wards, theme }: { visible: boolean; wards: VulnerabilityResponse | null; theme: MapTheme }) {
   const { map, isLoaded } = useMap();
@@ -189,9 +100,7 @@ function VulnerabilityLayer({ visible, wards, theme }: { visible: boolean; wards
     };
 
     if (map.getSource(WARD_SOURCE_ID)) {
-      (map.getSource(WARD_SOURCE_ID) as maplibregl.GeoJSONSource).setData(
-        featureCollection as GeoJSON.FeatureCollection
-      );
+      (map.getSource(WARD_SOURCE_ID) as maplibregl.GeoJSONSource).setData(featureCollection as GeoJSON.FeatureCollection);
     } else {
       map.addSource(WARD_SOURCE_ID, { type: "geojson", data: featureCollection as GeoJSON.FeatureCollection });
       const beforeId = getFirstLabelLayerId(map);
@@ -224,9 +133,7 @@ function VulnerabilityLayer({ visible, wards, theme }: { visible: boolean; wards
   useEffect(() => {
     if (!map) return;
     [WARD_FILL_LAYER_ID, WARD_LINE_LAYER_ID].forEach((id) => {
-      if (map.getLayer(id)) {
-        map.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
-      }
+      if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
     });
   }, [map, visible]);
 
@@ -243,12 +150,117 @@ function VulnerabilityLayer({ visible, wards, theme }: { visible: boolean; wards
   return null;
 }
 
+const RASTER_SOURCE_ID = "climagrid-raster";
+const RASTER_IMAGE_LAYER_ID = "climagrid-raster-image";
+// Dark basemap buildings/roads are already subtle by design - a fully
+// opaque raster on top swallows them entirely. Lower opacity in dark mode
+// so basemap detail still reads through the color surface.
+const RASTER_OPACITY: Record<MapTheme, number> = { dark: 0.62, light: 0.8 };
+
 /**
- * Single shared hover popup. Queries whichever data layers are currently
- * rendered at the cursor position and merges grid + ward info into one
- * card, instead of two independent popups that could overlap.
+ * Renders the smooth interpolated heat surface for the active layer - the
+ * map's only data visualization now (the discrete grid view was removed;
+ * see HoverPopup for how exact per-location values are still surfaced
+ * without a visible grid).
  */
-function HoverPopup({ enabled, showVulnerability }: { enabled: boolean; showVulnerability: boolean }) {
+function RasterLayer({ layerId, city, theme }: { layerId: LayerId; city: string; theme: MapTheme }) {
+  const { map, isLoaded } = useMap();
+
+  useEffect(() => {
+    if (!map || !isLoaded) return;
+
+    let cancelled = false;
+
+    fetchRaster(city, layerId)
+      .then((raster) => {
+        if (cancelled || !map) return;
+
+        const { rows, cols, bbox, values } = raster;
+        const [minLon, minLat, maxLon, maxLat] = bbox;
+
+        const canvas = document.createElement("canvas");
+        canvas.width = cols;
+        canvas.height = rows;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        const imageData = ctx.createImageData(cols, rows);
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const value = values[r * cols + c];
+            const [red, green, blue] = getColorForValue(layerId, value, theme);
+            const destRow = rows - 1 - r;
+            const idx = (destRow * cols + c) * 4;
+            imageData.data[idx] = red;
+            imageData.data[idx + 1] = green;
+            imageData.data[idx + 2] = blue;
+            imageData.data[idx + 3] = 230;
+          }
+        }
+        ctx.putImageData(imageData, 0, 0);
+
+        const dataUrl = canvas.toDataURL();
+        const coordinates: [[number, number], [number, number], [number, number], [number, number]] = [
+          [minLon, maxLat],
+          [maxLon, maxLat],
+          [maxLon, minLat],
+          [minLon, minLat],
+        ];
+
+        const existingSource = map.getSource(RASTER_SOURCE_ID) as maplibregl.ImageSource | undefined;
+        if (existingSource) {
+          existingSource.updateImage({ url: dataUrl, coordinates });
+        } else {
+          map.addSource(RASTER_SOURCE_ID, { type: "image", url: dataUrl, coordinates });
+          const beforeId = getFirstLabelLayerId(map);
+          map.addLayer(
+            { id: RASTER_IMAGE_LAYER_ID, type: "raster", source: RASTER_SOURCE_ID, paint: { "raster-opacity": RASTER_OPACITY[theme] } },
+            beforeId
+          );
+        }
+        if (map.getLayer(RASTER_IMAGE_LAYER_ID)) {
+          map.setPaintProperty(RASTER_IMAGE_LAYER_ID, "raster-opacity", RASTER_OPACITY[theme]);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load raster:", err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [map, isLoaded, layerId, city, theme]);
+
+  useEffect(() => {
+    return () => {
+      if (!map) return;
+      if (map.getLayer(RASTER_IMAGE_LAYER_ID)) map.removeLayer(RASTER_IMAGE_LAYER_ID);
+      if (map.getSource(RASTER_SOURCE_ID)) map.removeSource(RASTER_SOURCE_ID);
+    };
+  }, [map]);
+
+  return null;
+}
+
+function cellCenter(cell: GridCell): [number, number] {
+  const ring = cell.geometry.coordinates[0];
+  const lons = ring.map((p) => p[0]);
+  const lats = ring.map((p) => p[1]);
+  return [(Math.min(...lons) + Math.max(...lons)) / 2, (Math.min(...lats) + Math.max(...lats)) / 2];
+}
+
+// Beyond this distance (degrees) from any known grid cell, treat the
+// cursor as "outside the data area" rather than showing a misleadingly
+// "nearest" reading (e.g. hovering over a city far from Pune).
+const MAX_HOVER_DISTANCE_DEG = 0.015;
+
+/**
+ * Finds the grid cell nearest the cursor and shows its exact values, plus
+ * ward info when the vulnerability overlay is on. Since the discrete grid
+ * is no longer drawn, this works from the already-fetched `grid` data in
+ * memory rather than querying a rendered layer.
+ */
+function HoverPopup({ enabled, grid, showVulnerability }: { enabled: boolean; grid: GridResponse | null; showVulnerability: boolean }) {
   const { map, isLoaded } = useMap();
 
   useEffect(() => {
@@ -264,19 +276,28 @@ function HoverPopup({ enabled, showVulnerability }: { enabled: boolean; showVuln
       "border:1px solid #3f3f46;border-radius:8px;padding:10px 12px;box-shadow:0 4px 12px rgba(0,0,0,0.35);";
 
     const handleMouseMove = (e: maplibregl.MapMouseEvent) => {
-      if (!enabled) {
+      if (!enabled || !grid) {
         popup.remove();
         return;
       }
 
-      const layersToQuery = [GRID_FILL_LAYER_ID];
-      if (showVulnerability) layersToQuery.push(WARD_FILL_LAYER_ID);
+      const { lng, lat } = e.lngLat;
+      let nearest: GridCell | null = null;
+      let nearestDist = Infinity;
+      for (const cell of grid.cells) {
+        const [clon, clat] = cellCenter(cell);
+        const d = Math.hypot(clon - lng, clat - lat);
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearest = cell;
+        }
+      }
 
-      const existing = layersToQuery.filter((id) => map.getLayer(id));
-      if (existing.length === 0) return;
+      const wardFeature = showVulnerability
+        ? map.queryRenderedFeatures(e.point, { layers: map.getLayer(WARD_FILL_LAYER_ID) ? [WARD_FILL_LAYER_ID] : [] })[0]
+        : undefined;
 
-      const features = map.queryRenderedFeatures(e.point, { layers: existing });
-      if (features.length === 0) {
+      if ((!nearest || nearestDist > MAX_HOVER_DISTANCE_DEG) && !wardFeature) {
         map.getCanvas().style.cursor = "";
         popup.remove();
         return;
@@ -284,22 +305,18 @@ function HoverPopup({ enabled, showVulnerability }: { enabled: boolean; showVuln
 
       map.getCanvas().style.cursor = "pointer";
 
-      const gridFeature = features.find((f) => f.layer.id === GRID_FILL_LAYER_ID);
-      const wardFeature = features.find((f) => f.layer.id === WARD_FILL_LAYER_ID);
-
       let html = `<div style="${cardStyle}">`;
-      if (gridFeature) {
-        const p = gridFeature.properties as Record<string, number | null>;
+      if (nearest && nearestDist <= MAX_HOVER_DISTANCE_DEG) {
         html += `
-          <div><strong>Temperature:</strong> ${fmt(p.lst_celsius, 1)}\u00b0C</div>
-          <div><strong>Vegetation (NDVI):</strong> ${fmt(p.ndvi, 2)}</div>
-          <div><strong>Built-up density:</strong> ${fmt(p.built_up_index, 2)}</div>
-          <div><strong>Road density:</strong> ${fmt(p.traffic_density, 2)}</div>
+          <div><strong>Temperature:</strong> ${fmt(nearest.lst_celsius, 1)}\u00b0C</div>
+          <div><strong>Vegetation (NDVI):</strong> ${fmt(nearest.ndvi, 2)}</div>
+          <div><strong>Built-up density:</strong> ${fmt(nearest.built_up_index, 2)}</div>
+          <div><strong>Road density:</strong> ${fmt(nearest.traffic_density, 2)}</div>
         `;
       }
       if (wardFeature) {
         const p = wardFeature.properties as { ward_id: string; hvi: number };
-        if (gridFeature) html += `<div style="margin:6px 0;border-top:1px solid #3f3f46;"></div>`;
+        if (nearest) html += `<div style="margin:6px 0;border-top:1px solid #3f3f46;"></div>`;
         html += `
           <div><strong>Ward:</strong> ${p.ward_id}</div>
           <div><strong>HVI score:</strong> ${p.hvi.toFixed(3)}</div>
@@ -323,7 +340,7 @@ function HoverPopup({ enabled, showVulnerability }: { enabled: boolean; showVuln
       map.getCanvas().removeEventListener("mouseleave", handleMouseLeave);
       popup.remove();
     };
-  }, [map, isLoaded, enabled, showVulnerability]);
+  }, [map, isLoaded, enabled, grid, showVulnerability]);
 
   useEffect(() => {
     if (!enabled && map) map.getCanvas().style.cursor = "";
@@ -368,9 +385,9 @@ export function ClimateMap() {
       <Card className="h-full w-full p-0 overflow-hidden">
         <Map center={PUNE_CENTER} zoom={11.5} theme={theme} styles={MAP_STYLES}>
           <MapControls />
-          <GridLayer layerId={activeLayer} grid={grid} theme={theme} />
+          <RasterLayer layerId={activeLayer} city="pune" theme={theme} />
           <VulnerabilityLayer visible={showVulnerability} wards={vulnerability} theme={theme} />
-          <HoverPopup enabled={showHoverInfo} showVulnerability={showVulnerability} />
+          <HoverPopup enabled={showHoverInfo} grid={grid} showVulnerability={showVulnerability} />
           <BasemapEnhancer theme={theme} />
         </Map>
       </Card>

@@ -25,6 +25,16 @@ export interface VulnerabilityResponse {
   wards: VulnerabilityWard[];
 }
 
+export interface RasterResponse {
+  city: string;
+  layer: string;
+  rows: number;
+  cols: number;
+  bbox: [number, number, number, number];
+  values: number[];
+  pipeline_run_id: string;
+}
+
 async function apiFetch<T>(path: string): Promise<T> {
   const res = await fetch(path);
   if (!res.ok) {
@@ -40,4 +50,8 @@ export function fetchGrid(bbox: string, city: string) {
 
 export function fetchVulnerability(city: string) {
   return apiFetch<VulnerabilityResponse>(`/api/v1/vulnerability?city=${encodeURIComponent(city)}`);
+}
+
+export function fetchRaster(city: string, layer: string) {
+  return apiFetch<RasterResponse>(`/api/v1/raster?city=${encodeURIComponent(city)}&layer=${encodeURIComponent(layer)}`);
 }
