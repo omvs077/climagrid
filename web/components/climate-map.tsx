@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { fetchGrid, fetchVulnerability, fetchRaster, type GridCell, type GridResponse, type VulnerabilityResponse } from "@/lib/api";
 import { getColorForValue, LAYER_DEFS, getWardFillOpacity, type LayerId, type MapTheme } from "@/lib/color-scales";
 import { Legend, HviLegend } from "@/components/legend";
+import { InfoPanel } from "@/components/info-panel";
 
 const PUNE_CENTER: [number, number] = [73.845, 18.525];
 const PUNE_BBOX = "73.74,18.43,73.95,18.62";
@@ -354,6 +355,7 @@ export function ClimateMap() {
   const [showVulnerability, setShowVulnerability] = useState(false);
   const [showHoverInfo, setShowHoverInfo] = useState(true);
   const [theme, setTheme] = useState<"light" | "dark">("dark");
+  const [showInfo, setShowInfo] = useState(false);
   const [grid, setGrid] = useState<GridResponse | null>(null);
   const [vulnerability, setVulnerability] = useState<VulnerabilityResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -436,7 +438,18 @@ export function ClimateMap() {
             {theme === "dark" ? "Switch to Light Map" : "Switch to Dark Map"}
           </button>
         </div>
+
+        <div className="mt-2 border-t pt-2">
+          <button
+            onClick={() => setShowInfo(true)}
+            className="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+          >
+            &#9432; About this data
+          </button>
+        </div>
       </div>
+
+      {showInfo && <InfoPanel city="pune" onClose={() => setShowInfo(false)} />}
 
       <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
         <Legend

@@ -52,6 +52,22 @@ export function fetchVulnerability(city: string) {
   return apiFetch<VulnerabilityResponse>(`/api/v1/vulnerability?city=${encodeURIComponent(city)}`);
 }
 
+export interface MetaCity {
+  city: string;
+  last_run_id: string;
+  last_run_status: string;
+  last_updated_at: string;
+  sources_used: Record<string, string>;
+}
+export interface MetaResponse {
+  cities: MetaCity[];
+  layers: { id: string; label: string; unit: string }[];
+}
+
+export function fetchMeta() {
+  return apiFetch<MetaResponse>("/api/v1/meta");
+}
+
 export function fetchRaster(city: string, layer: string) {
   return apiFetch<RasterResponse>(`/api/v1/raster?city=${encodeURIComponent(city)}&layer=${encodeURIComponent(layer)}`);
 }
