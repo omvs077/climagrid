@@ -9,6 +9,8 @@ import { fetchGrid, fetchVulnerability, fetchRaster, type GridCell, type GridRes
 import { getColorForValue, LAYER_DEFS, getWardFillOpacity, type LayerId, type MapTheme } from "@/lib/color-scales";
 import { Legend, HviLegend } from "@/components/legend";
 import { InfoPanel } from "@/components/info-panel";
+import { useToast } from "@/components/toast";
+import { Spinner } from "@/components/spinner";
 
 const PUNE_CENTER: [number, number] = [73.845, 18.525];
 const PUNE_BBOX = "73.74,18.43,73.95,18.62";
@@ -164,13 +166,15 @@ const RASTER_OPACITY: Record<MapTheme, number> = { dark: 0.62, light: 0.8 };
  * see HoverPopup for how exact per-location values are still surfaced
  * without a visible grid).
  */
-function RasterLayer({ layerId, city, theme }: { layerId: LayerId; city: string; theme: MapTheme }) {
+function RasterLayer({ layerId, city, theme, onLoadingChange }: { layerId: LayerId; city: string; theme: MapTheme; onLoadingChange: (loading: boolean) => void }) {
   const { map, isLoaded } = useMap();
+  const { showToast } = useToast();
 
   useEffect(() => {
     if (!map || !isLoaded) return;
 
     let cancelled = false;
+    onLoadingChange(true);
 
     fetchRaster(city, layerId)
       .then((raster) => {
@@ -225,6 +229,12 @@ function RasterLayer({ layerId, city, theme }: { layerId: LayerId; city: string;
       })
       .catch((err) => {
         console.error("Failed to load raster:", err);
+        if (!cancelled) {
+          showToast("Couldn't load the heat data for this layer. Please try again.", "error");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) onLoadingChange(false);
       });
 
     return () => {
@@ -356,6 +366,7 @@ export function ClimateMap() {
   const [showHoverInfo, setShowHoverInfo] = useState(true);
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [showInfo, setShowInfo] = useState(false);
+  const [rasterLoading, setRasterLoading] = useState(false);
   const [grid, setGrid] = useState<GridResponse | null>(null);
   const [vulnerability, setVulnerability] = useState<VulnerabilityResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -387,7 +398,7 @@ export function ClimateMap() {
       <Card className="h-full w-full p-0 overflow-hidden">
         <Map center={PUNE_CENTER} zoom={11.5} theme={theme} styles={MAP_STYLES}>
           <MapControls />
-          <RasterLayer layerId={activeLayer} city="pune" theme={theme} />
+          <RasterLayer layerId={activeLayer} city="pune" theme={theme} onLoadingChange={setRasterLoading} />
           <VulnerabilityLayer visible={showVulnerability} wards={vulnerability} theme={theme} />
           <HoverPopup enabled={showHoverInfo} grid={grid} showVulnerability={showVulnerability} />
           <BasemapEnhancer theme={theme} />
@@ -452,6 +463,12 @@ export function ClimateMap() {
       {showInfo && <InfoPanel city="pune" onClose={() => setShowInfo(false)} />}
 
       <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
+        {rasterLoading && (
+          <div className="flex items-center gap-2 rounded-lg border bg-background/90 px-3 py-2 text-xs text-muted-foreground shadow-sm backdrop-blur">
+            <Spinner className="h-3.5 w-3.5" />
+            Updating heat map&hellip;
+          </div>
+        )}
         <Legend
           layerId={activeLayer}
           unit={LAYER_DEFS.find((l) => l.id === activeLayer)?.unit ?? ""}
@@ -461,13 +478,14 @@ export function ClimateMap() {
       </div>
 
       {loading && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60">
-          <span className="text-sm text-muted-foreground">Loading Pune climate data...</span>
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-background/70 backdrop-blur-sm">
+          <Spinner className="h-8 w-8 text-primary" />
+          <span className="text-sm text-muted-foreground">Loading Pune climate data&hellip;</span>
         </div>
       )}
       {error && (
-        <div className="absolute bottom-4 left-4 z-20 rounded bg-destructive px-3 py-2 text-sm text-destructive-foreground">
-          Failed to load data: {error}
+        <div className="absolute bottom-4 left-4 z-20 flex items-center gap-3 rounded-lg border bg-destructive px-4 py-3 text-sm text-destructive-foreground shadow-lg">
+          <span>Couldn&apos;t load climate data. Check your connection and reload the page.</span>
         </div>
       )}
     </div>

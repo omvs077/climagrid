@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { fetchMeta, type MetaResponse } from "@/lib/api";
+import { useToast } from "@/components/toast";
+import { Spinner } from "@/components/spinner";
 
 const SOURCE_LABELS: Record<string, string> = {
   gee: "Satellite temperature & vegetation (Google Earth Engine)",
@@ -40,12 +42,17 @@ function formatTimestamp(iso: string): string {
 
 export function InfoPanel({ city, onClose }: { city: string; onClose: () => void }) {
   const [meta, setMeta] = useState<MetaResponse | null>(null);
+  const [metaError, setMetaError] = useState(false);
+  const { showToast } = useToast();
 
   useEffect(() => {
     fetchMeta()
       .then(setMeta)
-      .catch(() => setMeta(null));
-  }, []);
+      .catch(() => {
+        setMetaError(true);
+        showToast("Couldn't load data source details right now.", "error");
+      });
+  }, [showToast]);
 
   const cityMeta = meta?.cities.find((c) => c.city === city);
 
@@ -58,7 +65,7 @@ export function InfoPanel({ city, onClose }: { city: string; onClose: () => void
         <div className="mb-4 flex items-start justify-between">
           <h2 className="text-lg font-semibold">About ClimaGrid</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground" aria-label="Close">
-            ✕
+            âœ•
           </button>
         </div>
 
@@ -92,7 +99,17 @@ export function InfoPanel({ city, onClose }: { city: string; onClose: () => void
 
         <div>
           <h3 className="mb-2 text-sm font-medium">Data sources & freshness</h3>
-          {!meta && <p className="text-sm text-muted-foreground">Loading&hellip;</p>}
+          {!meta && !metaError && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Spinner className="h-4 w-4" />
+              Loading&hellip;
+            </div>
+          )}
+          {metaError && (
+            <p className="text-sm text-muted-foreground">
+              Data source details are temporarily unavailable.
+            </p>
+          )}
           {meta && !cityMeta && (
             <p className="text-sm text-muted-foreground">No pipeline run recorded for this city yet.</p>
           )}
