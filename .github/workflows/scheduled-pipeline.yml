@@ -1,0 +1,38 @@
+name: Scheduled Pipeline Run
+
+# Runs the ClimaGrid data pipeline daily to keep grid/ward/raster data
+# fresh. Uses --mock for LST/NDVI until real GEE credentials are
+# configured (see pipeline/sources/gee.py). Overpass and Open-Meteo data
+# is always fetched live regardless.
+on:
+  schedule:
+    - cron: "0 3 * * *"  # 03:00 UTC daily (~8:30 AM IST)
+  workflow_dispatch: {}   # allows manual trigger from the Actions tab
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: pipeline
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: pipeline/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pipeline
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DEMO_CITY: pune
+        run: python run.py --city pune --mock
