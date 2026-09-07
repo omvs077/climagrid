@@ -27,9 +27,21 @@ const HVI_COLORS: [string, string, string] = ["#ffffb2", "#fd8d3c", "#bd0026"];
 // which made roads and buildings almost invisible against the fill layers.
 // Voyager keeps the same clean cartography but with real color differentiation.
 const MAP_STYLES = {
-  light: "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
-  dark: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+  light: "https://tiles.openfreemap.org/styles/liberty",
+  dark: "https://tiles.openfreemap.org/styles/dark",
 };
+
+const INDIA_BOUNDARY_SOURCE_ID = "india-disputed-boundaries";
+const INDIA_MUTE_LAYER_ID = "india-boundary-mute";
+const INDIA_CLAIMED_LAYER_ID = "india-boundary-claimed";
+// Curated by the OpenStreetMap India community specifically to correct
+// international basemaps' rendering of India's disputed borders (Jammu &
+// Kashmir, Ladakh, Aksai Chin) to match India's official position per
+// Survey of India, rather than the internationally-neutral "de facto"
+// lines OpenMapTiles-derived styles render by default.
+// Source: https://github.com/osm-in/mapbox-gl-styles
+const INDIA_BOUNDARY_DATA_URL =
+  "https://raw.githubusercontent.com/osm-in/mapbox-gl-styles/master/data/osm-india-adm0-disputed-lines.geojson";
 
 function getFirstLabelLayerId(map: maplibregl.Map): string | undefined {
   const layers = map.getStyle()?.layers;
@@ -79,6 +91,123 @@ function BasemapEnhancer({ theme }: { theme: MapTheme }) {
   useEffect(() => {
     if (!map || !isLoaded) return;
     enhanceBasemapContrast(map, theme);
+  }, [map, isLoaded, theme]);
+
+  return null;
+}
+
+/**
+ * Finds the basemap's own national/international border layer so our
+ * "claimed" correction line can inherit its live paint properties (color,
+ * width, opacity) rather than hardcoding a style that could drift out of
+ * sync with the base style. Matched by id pattern since this can vary
+ * slightly between OpenFreeMap's liberty/dark styles.
+ */
+function findBorderLayerId(map: maplibregl.Map): string | undefined {
+  const layers = map.getStyle()?.layers;
+  if (!layers) return undefined;
+  const candidates = layers.filter(
+    (l) => l.type === "line" && /boundary|admin|border/i.test(l.id)
+  );
+  const preferred = candidates.find((l) => /country|adm0|_2\b|level2/i.test(l.id));
+  return (preferred ?? candidates[0])?.id;
+}
+
+function findBackgroundColor(map: maplibregl.Map): string | undefined {
+  const layers = map.getStyle()?.layers;
+  const bgLayer = layers?.find((l) => l.type === "background");
+  if (!bgLayer) return undefined;
+  return map.getPaintProperty(bgLayer.id, "background-color") as string | undefined;
+}
+
+/**
+ * Corrects OpenFreeMap's (and most international basemaps') rendering of
+ * India's disputed borders - Jammu & Kashmir, Ladakh, Aksai Chin - to match
+ * India's official position per Survey of India, using a curated dataset
+ * maintained by the OpenStreetMap India community specifically for this.
+ * Non-negotiable per project requirements regardless of current map extent.
+ */
+function IndiaBoundaryCorrection({ theme }: { theme: MapTheme }) {
+  const { map, isLoaded } = useMap();
+
+  useEffect(() => {
+    if (!map || !isLoaded) return;
+    if (map.getSource(INDIA_BOUNDARY_SOURCE_ID)) return;
+
+    let cancelled = false;
+
+    async function apply() {
+      let data: GeoJSON.FeatureCollection;
+      try {
+        const res = await fetch(INDIA_BOUNDARY_DATA_URL);
+        data = await res.json();
+        console.log("India boundary feature sample:", data.features[0]?.properties, "total features:", data.features.length);
+      } catch (err) {
+        console.error("Failed to load India boundary correction data:", err);
+        return;
+      }
+      if (cancelled || !map || map.getSource(INDIA_BOUNDARY_SOURCE_ID)) return;
+
+      map.addSource(INDIA_BOUNDARY_SOURCE_ID, { type: "geojson", data });
+
+const borderLayerId = findBorderLayerId(map);
+const styleLayers = map.getStyle()?.layers ?? [];
+const borderIdx = borderLayerId
+  ? styleLayers.findIndex((l) => l.id === borderLayerId)
+  : -1;
+const layerAfterBorder =
+  borderIdx >= 0 && borderIdx + 1 < styleLayers.length
+    ? styleLayers[borderIdx + 1].id
+    : undefined;
+const beforeId = layerAfterBorder ?? getFirstLabelLayerId(map);
+      const baseColor = borderLayerId
+        ? (map.getPaintProperty(borderLayerId, "line-color") as string | undefined)
+        : undefined;
+      const baseWidth = borderLayerId
+        ? (map.getPaintProperty(borderLayerId, "line-width") as number | undefined)
+        : undefined;
+      const baseOpacity = borderLayerId
+        ? (map.getPaintProperty(borderLayerId, "line-opacity") as number | undefined)
+        : undefined;
+
+      const muteColor = findBackgroundColor(map) ?? (theme === "dark" ? "#1a1a1a" : "#f5f5f0");
+      const fallbackBorderColor = theme === "dark" ? "#9a9a9a" : "#7a7a7a";
+
+      map.addLayer(
+        {
+          id: INDIA_MUTE_LAYER_ID,
+          type: "line",
+          source: INDIA_BOUNDARY_SOURCE_ID,
+          filter: ["==", ["get", "disputed_by"], "IN"],
+          paint: {
+            "line-color": muteColor,
+            "line-width": 5,
+          },
+        },
+        beforeId
+      );
+
+      map.addLayer(
+        {
+          id: INDIA_CLAIMED_LAYER_ID,
+          type: "line",
+          source: INDIA_BOUNDARY_SOURCE_ID,
+          filter: ["==", ["get", "claimed_by"], "IN"],
+          paint: {
+            "line-color": baseColor ?? fallbackBorderColor,
+            "line-width": baseWidth ?? 1.2,
+            "line-opacity": baseOpacity ?? 1,
+          },
+        },
+        beforeId
+      );
+    }
+
+    apply();
+
+    return () => {
+      cancelled = true;
+    };
   }, [map, isLoaded, theme]);
 
   return null;
@@ -404,6 +533,7 @@ export function ClimateMap() {
           <VulnerabilityLayer visible={showVulnerability} wards={vulnerability} theme={theme} />
           <HoverPopup enabled={showHoverInfo} grid={grid} showVulnerability={showVulnerability} />
           <BasemapEnhancer theme={theme} />
+          <IndiaBoundaryCorrection theme={theme} />
         </Map>
       </Card>
 

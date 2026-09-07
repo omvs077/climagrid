@@ -13,18 +13,18 @@ type Ramp = { domain: [number, number, number]; colors: [string, string, string]
 // Dark-basemap ramps: brighter/more saturated so they read against a near-black background.
 const RAMPS_DARK: Record<LayerId, Ramp> = {
   lst_celsius: { domain: [31, 36.5, 42], colors: ["#2166ac", "#f7f7f7", "#b2182b"] },
-  ndvi: { domain: [0, 0.4, 0.85], colors: ["#a50026", "#ffffbf", "#1a9850"] },
-  built_up_index: { domain: [0, 0.3, 1], colors: ["#f2f0f7", "#9e9ac8", "#4a1486"] },
-  traffic_density: { domain: [0, 0.3, 1], colors: ["#f0f9e8", "#43a2ca", "#0868ac"] },
+  ndvi: { domain: [0.1, 0.38, 0.65], colors: ["#a50026", "#ffffbf", "#1a9850"] },
+  built_up_index: { domain: [0, 0.14, 0.36], colors: ["#f2f0f7", "#9e9ac8", "#4a1486"] },
+  traffic_density: { domain: [0, 0.14, 0.36], colors: ["#f0f9e8", "#43a2ca", "#0868ac"] },
 };
 
 // Light-basemap ramps: deeper, more muted tones. Reusing the dark-mode ramp
 // on a pale Positron basemap washed out and made place-name labels unreadable.
 const RAMPS_LIGHT: Record<LayerId, Ramp> = {
   lst_celsius: { domain: [31, 36.5, 42], colors: ["#3b4cc0", "#f0e68c", "#b40426"] },
-  ndvi: { domain: [0, 0.4, 0.85], colors: ["#8c510a", "#d9d9d9", "#01665e"] },
-  built_up_index: { domain: [0, 0.3, 1], colors: ["#c6c0dd", "#7a5ea8", "#2d0057"] },
-  traffic_density: { domain: [0, 0.3, 1], colors: ["#a6d3d9", "#2f8fae", "#08476b"] },
+  ndvi: { domain: [0.1, 0.38, 0.65], colors: ["#8c510a", "#d9d9d9", "#01665e"] },
+  built_up_index: { domain: [0, 0.14, 0.36], colors: ["#c6c0dd", "#7a5ea8", "#2d0057"] },
+  traffic_density: { domain: [0, 0.14, 0.36], colors: ["#a6d3d9", "#2f8fae", "#08476b"] },
 };
 
 const GRID_FILL_OPACITY: Record<MapTheme, number> = { dark: 0.6, light: 0.42 };
