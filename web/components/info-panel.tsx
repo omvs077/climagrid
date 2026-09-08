@@ -65,7 +65,7 @@ export function InfoPanel({ city, onClose }: { city: string; onClose: () => void
         <div className="mb-4 flex items-start justify-between">
           <h2 className="text-lg font-semibold">About ClimaGrid</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground" aria-label="Close">
-            âœ•
+            &#10005;
           </button>
         </div>
 

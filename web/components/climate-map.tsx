@@ -12,6 +12,7 @@ import { InfoPanel } from "@/components/info-panel";
 import { ExportDialog } from "@/components/export-dialog";
 import { useToast } from "@/components/toast";
 import { Spinner } from "@/components/spinner";
+import { AddressSearch } from "@/components/address-search";
 
 const PUNE_CENTER: [number, number] = [73.845, 18.525];
 const PUNE_BBOX = "73.74,18.43,73.95,18.62";
@@ -534,6 +535,7 @@ export function ClimateMap() {
           <HoverPopup enabled={showHoverInfo} grid={grid} showVulnerability={showVulnerability} />
           <BasemapEnhancer theme={theme} />
           <IndiaBoundaryCorrection theme={theme} />
+          <AddressSearch />
         </Map>
       </Card>
 
