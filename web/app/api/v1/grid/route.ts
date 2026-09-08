@@ -58,7 +58,7 @@ export async function GET(request: Request) {
   return Response.json(
     {
       city,
-      pipeline_run_id: cells[0]?.pipeline_run_id ?? null,
+      pipeline_run_id: rows.rows[0]?.pipeline_run_id ?? null,
       cells,
     },
     {
