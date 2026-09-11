@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Map, MapControls, useMap } from "@/components/ui/map";
 import { Card } from "@/components/ui/card";

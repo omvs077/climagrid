@@ -1,7 +1,15 @@
 "use client";
 
-import MapLibreGL, { type PopupOptions, type MarkerOptions } from "maplibre-gl";
+import * as MapLibreGL from "maplibre-gl";
+import type { PopupOptions, MarkerOptions } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+
+// Turbopack cannot correctly bundle MapLibre v6's worker via import.meta.url
+// (it hashes the worker asset without its required maplibre-gl-shared.mjs
+// sibling). Both files are copied to public/ at build time (see
+// scripts/copy-maplibre-worker.mjs, wired into predev/prebuild), and we point
+// the worker there explicitly instead.
+MapLibreGL.setWorkerUrl("/maplibre-gl-worker.mjs");
 import type * as GeoJSON from "geojson";
 import {
   createContext,
@@ -183,7 +191,7 @@ type MapProps = {
   };
   /**
    * Use a transparent, tile-less basemap instead of the default Carto street
-   * basemap — a blank canvas. Used alone it renders nothing; add your own
+   * basemap Ã¢â‚¬â€ a blank canvas. Used alone it renders nothing; add your own
    * layers on top (`<MapGeoJSON>`, `<MapArc>`, markers, etc.). Ideal for data
    * visualizations (choropleths, arcs, dot maps).
    * Ignored when an explicit `styles` prop is provided.
@@ -1317,7 +1325,7 @@ const GEOJSON_DEFAULT_COLORS = {
 
 /**
  * Renders arbitrary GeoJSON as fill + outline layers on the map. Composes like
- * `MapRoute` / `MapArc` — drop it inside `<Map>` (typically with `blank`) for
+ * `MapRoute` / `MapArc` Ã¢â‚¬â€ drop it inside `<Map>` (typically with `blank`) for
  * choropleths and region/data maps. For full control over expressions and
  * multiple layers, manage layers directly via `useMap()` instead.
  */
@@ -1568,7 +1576,7 @@ type MapArcProps<T extends MapArcDatum = MapArcDatum> = {
   /**
    * How far each arc bows away from a straight line. `0` renders straight
    * lines; higher values bend further. Negative values bend to the opposite
-   * side. Arcs are computed as a quadratic Bézier in lng/lat space; the
+   * side. Arcs are computed as a quadratic BÃƒÂ©zier in lng/lat space; the
    * destination longitude is unwrapped relative to the origin so that arcs
    * cross the antimeridian via the shorter great-circle direction. (default: 0.2)
    */

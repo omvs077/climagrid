@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { useMap, MapMarker, MarkerContent } from "@/components/ui/map";
+import { useMap, MapMarker, MarkerContent, MarkerPopup } from "@/components/ui/map";
 import { useToast } from "@/components/toast";
 
 interface GeocodeResult {
@@ -10,8 +10,18 @@ interface GeocodeResult {
   lon: number;
 }
 
+interface PinnedLocation extends GeocodeResult {
+  id: string;
+}
+
 const DEBOUNCE_MS = 400;
 const FLY_TO_ZOOM = 15;
+
+function makePinId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `pin-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 export function AddressSearch() {
   const { map, isLoaded } = useMap();
@@ -21,7 +31,7 @@ export function AddressSearch() {
   const [results, setResults] = useState<GeocodeResult[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
-  const [selected, setSelected] = useState<GeocodeResult | null>(null);
+  const [pins, setPins] = useState<PinnedLocation[]>([]);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -62,10 +72,19 @@ export function AddressSearch() {
 
   function handleSelect(result: GeocodeResult) {
     if (!map || !isLoaded) return;
-    setSelected(result);
-    setQuery(result.label);
+    setPins((prev) => [...prev, { ...result, id: makePinId() }]);
+    setQuery("");
+    setResults([]);
     setIsOpen(false);
     map.flyTo({ center: [result.lon, result.lat], zoom: FLY_TO_ZOOM, essential: true });
+  }
+
+  function removePin(id: string) {
+    setPins((prev) => prev.filter((p) => p.id !== id));
+  }
+
+  function clearAllPins() {
+    setPins([]);
   }
 
   // Close dropdown on outside click
@@ -108,13 +127,34 @@ export function AddressSearch() {
             ))}
           </ul>
         )}
+        {pins.length > 0 && (
+          <div className="mt-1 flex justify-end">
+            <button
+              onClick={clearAllPins}
+              className="rounded bg-background/95 px-2 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur hover:text-foreground"
+            >
+              Clear all pins ({pins.length})
+            </button>
+          </div>
+        )}
       </div>
 
-      {selected && (
-        <MapMarker longitude={selected.lon} latitude={selected.lat}>
+      {pins.map((pin) => (
+        <MapMarker key={pin.id} longitude={pin.lon} latitude={pin.lat}>
           <MarkerContent />
+          <MarkerPopup closeButton>
+            <div className="max-w-xs p-2 text-sm">
+              <p className="mb-2">{pin.label}</p>
+              <button
+                onClick={() => removePin(pin.id)}
+                className="rounded bg-destructive px-2 py-1 text-xs text-destructive-foreground hover:opacity-90"
+              >
+                Remove pin
+              </button>
+            </div>
+          </MarkerPopup>
         </MapMarker>
-      )}
+      ))}
     </>
   );
 }
