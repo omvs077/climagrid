@@ -13,6 +13,7 @@ import { ExportDialog } from "@/components/export-dialog";
 import { useToast } from "@/components/toast";
 import { Spinner } from "@/components/spinner";
 import { AddressSearch } from "@/components/address-search";
+import { type BoundsFilter } from "@/lib/export";
 
 const PUNE_CENTER: [number, number] = [73.845, 18.525];
 const PUNE_BBOX = "73.74,18.43,73.95,18.62";
@@ -119,6 +120,37 @@ function findBackgroundColor(map: maplibregl.Map): string | undefined {
   const bgLayer = layers?.find((l) => l.type === "background");
   if (!bgLayer) return undefined;
   return map.getPaintProperty(bgLayer.id, "background-color") as string | undefined;
+}
+
+/**
+ * Tracks the map's current viewport bounds and lifts them up to the
+ * parent, so the export dialog can offer a "current map view" filter
+ * instead of always exporting the entire loaded dataset.
+ */
+function MapBoundsTracker({ onBoundsChange }: { onBoundsChange: (b: BoundsFilter | null) => void }) {
+  const { map, isLoaded } = useMap();
+
+  useEffect(() => {
+    if (!map || !isLoaded) return;
+
+    function updateBounds() {
+      const b = map!.getBounds();
+      onBoundsChange({
+        west: b.getWest(),
+        south: b.getSouth(),
+        east: b.getEast(),
+        north: b.getNorth(),
+      });
+    }
+
+    updateBounds();
+    map.on("moveend", updateBounds);
+    return () => {
+      map.off("moveend", updateBounds);
+    };
+  }, [map, isLoaded, onBoundsChange]);
+
+  return null;
 }
 
 /**
@@ -498,6 +530,7 @@ export function ClimateMap() {
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [showInfo, setShowInfo] = useState(false);
   const [showExport, setShowExport] = useState(false);
+  const [mapBounds, setMapBounds] = useState<BoundsFilter | null>(null);
   const [rasterLoading, setRasterLoading] = useState(false);
   const [grid, setGrid] = useState<GridResponse | null>(null);
   const [vulnerability, setVulnerability] = useState<VulnerabilityResponse | null>(null);
@@ -536,6 +569,7 @@ export function ClimateMap() {
           <BasemapEnhancer theme={theme} />
           <IndiaBoundaryCorrection theme={theme} />
           <AddressSearch />
+          <MapBoundsTracker onBoundsChange={setMapBounds} />
         </Map>
       </Card>
 
@@ -605,7 +639,7 @@ export function ClimateMap() {
 
       {showInfo && <InfoPanel city="pune" onClose={() => setShowInfo(false)} />}
       {showExport && (
-        <ExportDialog grid={grid?.cells ?? null} wards={vulnerability?.wards ?? null} onClose={() => setShowExport(false)} />
+        <ExportDialog grid={grid?.cells ?? null} wards={vulnerability?.wards ?? null} mapBounds={mapBounds} onClose={() => setShowExport(false)} />
       )}
 
       <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">

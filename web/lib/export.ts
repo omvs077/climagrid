@@ -27,6 +27,20 @@ const LAYER_CSV_HEADERS: Record<LayerId, string> = {
   traffic_density: "road_density",
 };
 
+export interface BoundsFilter {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+}
+
+export function filterCellsByBounds(cells: GridCell[], bounds: BoundsFilter): GridCell[] {
+  return cells.filter((c) => {
+    const [lon, lat] = cellCentroid(c);
+    return lon >= bounds.west && lon <= bounds.east && lat >= bounds.south && lat <= bounds.north;
+  });
+}
+
 export function exportGridGeoJSON(cells: GridCell[], layers: LayerId[]) {
   const featureCollection = {
     type: "FeatureCollection" as const,
