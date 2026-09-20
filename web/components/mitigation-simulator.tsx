@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useRef, useCallback } from "react";
 import type { ReactNode } from "react";
 import type { GridResponse, VulnerabilityWard } from "@/lib/api";
 import {
@@ -57,6 +57,28 @@ export function MitigationSimulator({
     return summarizeEstimates(estimates);
   }, [selectedCells, interventions]);
 
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  const dragOffset = useRef<{ x: number; y: number } | null>(null);
+
+  const handleDragStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const panel = e.currentTarget.closest("[data-sim-panel]") as HTMLElement | null;
+    if (!panel) return;
+    const rect = panel.getBoundingClientRect();
+    dragOffset.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+
+    function handleMove(ev: MouseEvent) {
+      if (!dragOffset.current) return;
+      setDragPos({ x: ev.clientX - dragOffset.current.x, y: ev.clientY - dragOffset.current.y });
+    }
+    function handleUp() {
+      dragOffset.current = null;
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    }
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+  }, []);
+
   if (!active) return null;
 
   const hasAnyIntervention =
@@ -76,20 +98,37 @@ export function MitigationSimulator({
 
   const pixelFont = { fontFamily: "var(--font-pixel)" };
 
+
   return (
     <div
-      className="absolute right-4 top-20 z-20 w-80 overflow-y-auto border-4 border-[#0f0d1a] p-4 shadow-2xl"
+      data-sim-panel
+      className="fixed z-20 w-80 overflow-y-auto border-4 border-[#0f0d1a] p-4 shadow-2xl"
       style={{
-        maxHeight: "calc(100% - 6rem)",
+        maxHeight: "calc(100vh - 6rem)",
         background: "#1B1730",
         boxShadow: "6px 6px 0 rgba(0,0,0,0.4), inset 0 0 0 2px #4C9A4A",
+        left: dragPos ? dragPos.x + "px" : undefined,
+        top: dragPos ? dragPos.y + "px" : "320px",
+        right: dragPos ? undefined : "16px",
       }}
     >
-      <div className="mb-3 flex items-start justify-between">
+      <div
+        className="mb-3 flex cursor-move items-start justify-between select-none"
+        onMouseDown={handleDragStart}
+      >
         <h2 className="text-xs leading-relaxed text-[#F2E9D8]" style={pixelFont}>
           RESTORE THE CITY
         </h2>
-        <button onClick={onClose} className="text-[#F2E9D8] hover:text-[#E85D4C]" style={pixelFont} aria-label="Close">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="text-[#F2E9D8] hover:text-[#E85D4C]"
+          style={pixelFont}
+          aria-label="Close"
+        >
           X
         </button>
       </div>

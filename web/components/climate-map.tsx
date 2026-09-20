@@ -15,6 +15,7 @@ import { Spinner } from "@/components/spinner";
 import { AddressSearch } from "@/components/address-search";
 import { MitigationSimulator, type SelectionMode } from "@/components/mitigation-simulator";
 import { DEFAULT_INTERVENTIONS, pointInWardGeometry, type InterventionSettings } from "@/lib/mitigation";
+import { ScreenZone } from "@/components/ui/screen-zone";
 import { type BoundsFilter } from "@/lib/export";
 
 const PUNE_CENTER: [number, number] = [73.845, 18.525];
@@ -742,7 +743,9 @@ export function ClimateMap() {
           <HoverPopup enabled={showHoverInfo} grid={grid} showVulnerability={showVulnerability} />
           <BasemapEnhancer theme={theme} />
           <IndiaBoundaryCorrection theme={theme} />
-          <AddressSearch />
+          <ScreenZone position="top-center">
+            <AddressSearch />
+          </ScreenZone>
           <MapBoundsTracker onBoundsChange={setMapBounds} />
           <MitigationSelectionLayer
             active={simulatorActive}
@@ -762,7 +765,8 @@ export function ClimateMap() {
         </Map>
       </Card>
 
-      <div className="absolute top-4 left-4 z-10 flex flex-col gap-1 rounded-lg border bg-background/90 p-3 shadow-sm backdrop-blur">
+      <ScreenZone position="top-left">
+        <div className="flex flex-col gap-1 rounded-lg border bg-background/90 p-3 shadow-sm backdrop-blur">
         <span className="mb-1 text-xs font-medium text-muted-foreground">Layer</span>
         {LAYER_DEFS.map((l) => (
           <button
@@ -833,7 +837,8 @@ export function ClimateMap() {
             &#8681; Export data
           </button>
         </div>
-      </div>
+        </div>
+      </ScreenZone>
 
       {showInfo && <InfoPanel city="pune" onClose={() => setShowInfo(false)} />}
       {showExport && (
@@ -877,7 +882,7 @@ export function ClimateMap() {
         onInterventionsChange={setInterventions}
       />
 
-      <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
+      <ScreenZone position="top-right">
         {rasterLoading && (
           <div className="flex items-center gap-2 rounded-lg border bg-background/90 px-3 py-2 text-xs text-muted-foreground shadow-sm backdrop-blur">
             <Spinner className="h-3.5 w-3.5" />
@@ -890,7 +895,7 @@ export function ClimateMap() {
           theme={theme}
         />
         {showVulnerability && <HviLegend domain={HVI_DOMAIN} colors={HVI_COLORS} />}
-      </div>
+      </ScreenZone>
 
       {loading && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-background/70 backdrop-blur-sm">

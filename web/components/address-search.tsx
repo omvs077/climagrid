@@ -100,7 +100,7 @@ export function AddressSearch() {
 
   return (
     <>
-      <div ref={containerRef} className="absolute top-4 left-1/2 z-10 w-72 -translate-x-1/2">
+      <div ref={containerRef} className="w-72">
         <input
           type="text"
           value={query}
