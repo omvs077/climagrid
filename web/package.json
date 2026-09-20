@@ -15,6 +15,7 @@
     },
     "dependencies": {
         "@base-ui/react": "^1.7.0",
+        "@nsmr/pixelart-react": "^2.0.0",
         "@upstash/ratelimit": "^2.0.8",
         "@upstash/redis": "^1.38.2",
         "class-variance-authority": "^0.7.1",
@@ -41,6 +42,7 @@
         "drizzle-kit": "^0.31.10",
         "eslint": "^9",
         "eslint-config-next": "16.3.0",
+        "sharp": "^0.35.4",
         "tailwindcss": "^4",
         "typescript": "^5"
     },

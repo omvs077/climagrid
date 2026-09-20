@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Map, MapControls, useMap } from "@/components/ui/map";
@@ -13,6 +13,8 @@ import { ExportDialog } from "@/components/export-dialog";
 import { useToast } from "@/components/toast";
 import { Spinner } from "@/components/spinner";
 import { AddressSearch } from "@/components/address-search";
+import { MitigationSimulator, type SelectionMode } from "@/components/mitigation-simulator";
+import { DEFAULT_INTERVENTIONS, pointInWardGeometry, type InterventionSettings } from "@/lib/mitigation";
 import { type BoundsFilter } from "@/lib/export";
 
 const PUNE_CENTER: [number, number] = [73.845, 18.525];
@@ -20,6 +22,8 @@ const PUNE_BBOX = "73.74,18.43,73.95,18.62";
 
 const WARD_SOURCE_ID = "climagrid-wards";
 const WARD_FILL_LAYER_ID = "climagrid-wards-fill";
+const SIM_SELECTION_SOURCE_ID = "climagrid-sim-selection";
+const SIM_SELECTION_LAYER_ID = "climagrid-sim-selection-outline";
 const WARD_LINE_LAYER_ID = "climagrid-wards-line";
 
 const HVI_DOMAIN: [number, number, number] = [0.2, 0.4, 0.6];
@@ -423,6 +427,171 @@ function cellCenter(cell: GridCell): [number, number] {
   return [(Math.min(...lons) + Math.max(...lons)) / 2, (Math.min(...lats) + Math.max(...lats)) / 2];
 }
 
+/**
+ * Renders selection UI for the mitigation simulator: click-to-toggle
+ * individual cells, drag-to-select a rectangular area, or a highlight
+ * for whichever cells are currently selected (any mode). Reuses the
+ * same nearest-centroid technique as HoverPopup since there is no
+ * discrete clickable grid layer - just the smooth raster.
+ */
+function MitigationSelectionLayer({
+  active,
+  mode,
+  grid,
+  selectedCellIds,
+  onToggleCell,
+  onRectangleSelect,
+}: {
+  active: boolean;
+  mode: "cells" | "rectangle" | "ward";
+  grid: GridResponse | null;
+  selectedCellIds: Set<string>;
+  onToggleCell: (id: string) => void;
+  onRectangleSelect: (ids: Set<string>) => void;
+}) {
+  const { map, isLoaded } = useMap();
+  const dragStateRef = useRef<{ startX: number; startY: number; box: HTMLDivElement } | null>(null);
+
+  // Click-to-toggle individual cells
+  useEffect(() => {
+    if (!map || !isLoaded || !active || mode !== "cells" || !grid) return;
+
+    const handleClick = (e: maplibregl.MapMouseEvent) => {
+      const { lng, lat } = e.lngLat;
+      let nearest: GridCell | null = null;
+      let nearestDist = Infinity;
+      for (const cell of grid.cells) {
+        const [clon, clat] = cellCenter(cell);
+        const d = Math.hypot(clon - lng, clat - lat);
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearest = cell;
+        }
+      }
+      if (nearest && nearestDist <= MAX_HOVER_DISTANCE_DEG) {
+        onToggleCell(nearest.grid_id);
+      }
+    };
+
+    map.on("click", handleClick);
+    return () => {
+      map.off("click", handleClick);
+    };
+  }, [map, isLoaded, active, mode, grid, onToggleCell]);
+
+  // Drag-to-select a rectangular area
+  useEffect(() => {
+    if (!map || !isLoaded || !active || mode !== "rectangle" || !grid) return;
+
+    const canvas = map.getCanvas();
+    const container = map.getContainer();
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const rect = container.getBoundingClientRect();
+      const startX = e.clientX - rect.left;
+      const startY = e.clientY - rect.top;
+      const box = document.createElement("div");
+      box.style.cssText =
+        "position:absolute;border:2px dashed #7EC8E3;background:rgba(126,200,227,0.15);pointer-events:none;z-index:20;";
+      box.style.left = startX + "px";
+      box.style.top = startY + "px";
+      container.appendChild(box);
+      dragStateRef.current = { startX, startY, box };
+      map.dragPan.disable();
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const drag = dragStateRef.current;
+      if (!drag) return;
+      const rect = container.getBoundingClientRect();
+      const curX = e.clientX - rect.left;
+      const curY = e.clientY - rect.top;
+      const left = Math.min(drag.startX, curX);
+      const top = Math.min(drag.startY, curY);
+      const width = Math.abs(curX - drag.startX);
+      const height = Math.abs(curY - drag.startY);
+      drag.box.style.left = left + "px";
+      drag.box.style.top = top + "px";
+      drag.box.style.width = width + "px";
+      drag.box.style.height = height + "px";
+    };
+
+    const handleMouseUp = (e: MouseEvent) => {
+      const drag = dragStateRef.current;
+      if (!drag) return;
+      const rect = container.getBoundingClientRect();
+      const endX = e.clientX - rect.left;
+      const endY = e.clientY - rect.top;
+
+      const p1 = map.unproject([drag.startX, drag.startY]);
+      const p2 = map.unproject([endX, endY]);
+      const bounds = {
+        west: Math.min(p1.lng, p2.lng),
+        east: Math.max(p1.lng, p2.lng),
+        south: Math.min(p1.lat, p2.lat),
+        north: Math.max(p1.lat, p2.lat),
+      };
+
+      const matched = new Set<string>();
+      for (const cell of grid.cells) {
+        const [clon, clat] = cellCenter(cell);
+        if (clon >= bounds.west && clon <= bounds.east && clat >= bounds.south && clat <= bounds.north) {
+          matched.add(cell.grid_id);
+        }
+      }
+      onRectangleSelect(matched);
+
+      drag.box.remove();
+      dragStateRef.current = null;
+      map.dragPan.enable();
+    };
+
+    canvas.addEventListener("mousedown", handleMouseDown);
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      canvas.removeEventListener("mousedown", handleMouseDown);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      map.dragPan.enable();
+    };
+  }, [map, isLoaded, active, mode, grid, onRectangleSelect]);
+
+  // Highlight currently-selected cells (any mode) with a pixelated dashed outline
+  useEffect(() => {
+    if (!map || !isLoaded || !grid) return;
+
+    const featureCollection = {
+      type: "FeatureCollection" as const,
+      features: grid.cells
+        .filter((c) => selectedCellIds.has(c.grid_id))
+        .map((c) => ({ type: "Feature" as const, geometry: c.geometry, properties: {} })),
+    };
+
+    if (map.getSource(SIM_SELECTION_SOURCE_ID)) {
+      (map.getSource(SIM_SELECTION_SOURCE_ID) as maplibregl.GeoJSONSource).setData(
+        featureCollection as GeoJSON.FeatureCollection
+      );
+    } else {
+      map.addSource(SIM_SELECTION_SOURCE_ID, { type: "geojson", data: featureCollection as GeoJSON.FeatureCollection });
+      map.addLayer({
+        id: SIM_SELECTION_LAYER_ID,
+        type: "line",
+        source: SIM_SELECTION_SOURCE_ID,
+        paint: {
+          "line-color": "#7EC8E3",
+          "line-width": 3,
+          "line-dasharray": [2, 1.5],
+        },
+      });
+    }
+  }, [map, isLoaded, grid, selectedCellIds]);
+
+  return null;
+}
+
 // Beyond this distance (degrees) from any known grid cell, treat the
 // cursor as "outside the data area" rather than showing a misleadingly
 // "nearest" reading (e.g. hovering over a city far from Pune).
@@ -531,6 +700,11 @@ export function ClimateMap() {
   const [showInfo, setShowInfo] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [mapBounds, setMapBounds] = useState<BoundsFilter | null>(null);
+  const [simulatorActive, setSimulatorActive] = useState(false);
+  const [selectionMode, setSelectionMode] = useState<SelectionMode>("cells");
+  const [selectedCellIds, setSelectedCellIds] = useState<Set<string>>(new Set());
+  const [selectedWardId, setSelectedWardId] = useState<string | null>(null);
+  const [interventions, setInterventions] = useState<InterventionSettings>(DEFAULT_INTERVENTIONS);
   const [rasterLoading, setRasterLoading] = useState(false);
   const [grid, setGrid] = useState<GridResponse | null>(null);
   const [vulnerability, setVulnerability] = useState<VulnerabilityResponse | null>(null);
@@ -570,6 +744,21 @@ export function ClimateMap() {
           <IndiaBoundaryCorrection theme={theme} />
           <AddressSearch />
           <MapBoundsTracker onBoundsChange={setMapBounds} />
+          <MitigationSelectionLayer
+            active={simulatorActive}
+            mode={selectionMode}
+            grid={grid}
+            selectedCellIds={selectedCellIds}
+            onToggleCell={(id) => {
+              setSelectedCellIds((prev) => {
+                const next = new Set(prev);
+                if (next.has(id)) next.delete(id);
+                else next.add(id);
+                return next;
+              });
+            }}
+            onRectangleSelect={(ids) => setSelectedCellIds(ids)}
+          />
         </Map>
       </Card>
 
@@ -620,6 +809,15 @@ export function ClimateMap() {
 
         <div className="mt-2 border-t pt-2">
           <button
+            onClick={() => setSimulatorActive((a) => !a)}
+            className="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+          >
+            {simulatorActive ? "Close Mitigation Simulator" : "Open Mitigation Simulator"}
+          </button>
+        </div>
+
+        <div className="mt-2 border-t pt-2">
+          <button
             onClick={() => setShowInfo(true)}
             className="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
           >
@@ -641,6 +839,43 @@ export function ClimateMap() {
       {showExport && (
         <ExportDialog grid={grid?.cells ?? null} wards={vulnerability?.wards ?? null} mapBounds={mapBounds} onClose={() => setShowExport(false)} />
       )}
+
+      <MitigationSimulator
+        active={simulatorActive}
+        onClose={() => setSimulatorActive(false)}
+        selectionMode={selectionMode}
+        onSelectionModeChange={setSelectionMode}
+        selectedCellIds={selectedCellIds}
+        onClearSelection={() => {
+          setSelectedCellIds(new Set());
+          setSelectedWardId(null);
+        }}
+        grid={grid}
+        wards={vulnerability?.wards ?? null}
+        selectedWardId={selectedWardId}
+        onSelectWard={(wardId) => {
+          setSelectedWardId(wardId);
+          if (!wardId || !grid || !vulnerability) {
+            setSelectedCellIds(new Set());
+            return;
+          }
+          const ward = vulnerability.wards.find((w) => w.ward_id === wardId);
+          if (!ward) {
+            setSelectedCellIds(new Set());
+            return;
+          }
+          const matched = new Set<string>();
+          for (const cell of grid.cells) {
+            const [lon, lat] = cellCenter(cell);
+            if (pointInWardGeometry(lon, lat, ward.geometry)) {
+              matched.add(cell.grid_id);
+            }
+          }
+          setSelectedCellIds(matched);
+        }}
+        interventions={interventions}
+        onInterventionsChange={setInterventions}
+      />
 
       <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
         {rasterLoading && (
