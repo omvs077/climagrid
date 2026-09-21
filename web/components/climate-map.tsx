@@ -592,10 +592,12 @@ function MitigationSelectionLayer({
     }
   }, [map, isLoaded, grid, selectedCellIds]);
 
-  // Scatter decorative sprites on selected cells, scaled by intervention
-  // intensity. Only the two ADDITIVE interventions get a visual (trees,
-  // cool-roof accents) - reduce_built_up/reduce_traffic represent
-  // removing something, which doesn't have a clean add-a-sprite visual yet.
+  // Scatter decorative sprites on selected cells, placed according to
+  // what's actually underneath on the basemap (trees avoid buildings,
+  // roof accents sit on buildings, calmed-street markers sit near roads),
+  // scaled by intervention intensity. Layer matching is pattern-based -
+  // basemap-agnostic, same technique as enhanceBasemapContrast/
+  // findBorderLayerId elsewhere in this file.
   const decorationMarkersRef = useRef<maplibregl.Marker[]>([]);
 
   useEffect(() => {
@@ -611,8 +613,23 @@ function MitigationSelectionLayer({
 
     const treeCount = Math.round((interventions.trees / 100) * 3);
     const roofCount = Math.round((interventions.cool_roofs / 100) * 2);
+    const greenspaceCount = Math.round((interventions.reduce_built_up / 100) * 2);
+    const calmCount = Math.round((interventions.reduce_traffic / 100) * 2);
 
-    function randomPointInCell(cell: GridCell): [number, number] {
+    function findLayerIds(pattern: RegExp): string[] {
+      const styleLayers = map!.getStyle()?.layers ?? [];
+      return styleLayers.filter((l) => pattern.test(l.id)).map((l) => l.id);
+    }
+    const buildingLayerIds = findLayerIds(/building/i);
+    const roadLayerIds = findLayerIds(/highway|road|street|transportation/i);
+
+    function onLayers(lonLat: [number, number], layerIds: string[]): boolean {
+      if (layerIds.length === 0) return false;
+      const screenPoint = map!.project(lonLat);
+      return map!.queryRenderedFeatures([screenPoint.x, screenPoint.y], { layers: layerIds }).length > 0;
+    }
+
+    function subGridPoints(cell: GridCell, count: number): [number, number][] {
       const ring = cell.geometry.coordinates[0];
       const lons = ring.map((p) => p[0]);
       const lats = ring.map((p) => p[1]);
@@ -620,33 +637,90 @@ function MitigationSelectionLayer({
       const maxLon = Math.max(...lons);
       const minLat = Math.min(...lats);
       const maxLat = Math.max(...lats);
-      return [minLon + Math.random() * (maxLon - minLon), minLat + Math.random() * (maxLat - minLat)];
+      const gridSize = 3;
+      const cells: [number, number][] = [];
+      for (let r = 0; r < gridSize; r++) {
+        for (let c = 0; c < gridSize; c++) cells.push([r, c]);
+      }
+      for (let i = cells.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [cells[i], cells[j]] = [cells[j], cells[i]];
+      }
+      const subLonSpan = (maxLon - minLon) / gridSize;
+      const subLatSpan = (maxLat - minLat) / gridSize;
+      return cells.slice(0, Math.min(count, cells.length)).map(([r, c]) => [
+        minLon + c * subLonSpan + Math.random() * subLonSpan,
+        minLat + r * subLatSpan + Math.random() * subLatSpan,
+      ]);
+    }
+
+    function findSuitablePoint(
+      cell: GridCell,
+      matches: (p: [number, number]) => boolean
+    ): [number, number] {
+      const candidates = subGridPoints(cell, 6);
+      for (const p of candidates) {
+        if (matches(p)) return p;
+      }
+      return candidates[0];
+    }
+
+    function addMarker(point: [number, number], build: () => HTMLElement) {
+      const marker = new maplibregl.Marker({ element: build(), anchor: "center" })
+        .setLngLat(point)
+        .addTo(map!);
+      decorationMarkersRef.current.push(marker);
     }
 
     for (const cell of cellsToDecorate) {
       for (let i = 0; i < treeCount; i++) {
-        const el = document.createElement("img");
-        el.src = Math.random() < 0.5 ? "/sprites/_curated/tree_teal.png" : "/sprites/_curated/tree_orange.png";
-        el.style.width = "16px";
-        el.style.height = "16px";
-        el.style.imageRendering = "pixelated";
-        el.style.pointerEvents = "none";
-        const marker = new maplibregl.Marker({ element: el, anchor: "center" })
-          .setLngLat(randomPointInCell(cell))
-          .addTo(map);
-        decorationMarkersRef.current.push(marker);
+        const point = findSuitablePoint(cell, (p) => !onLayers(p, buildingLayerIds));
+        addMarker(point, () => {
+          const el = document.createElement("img");
+          el.src = Math.random() < 0.5 ? "/sprites/_curated/tree_teal.png" : "/sprites/_curated/tree_orange.png";
+          el.style.width = "16px";
+          el.style.height = "16px";
+          el.style.imageRendering = "pixelated";
+          el.style.pointerEvents = "none";
+          return el;
+        });
       }
       for (let i = 0; i < roofCount; i++) {
-        const el = document.createElement("div");
-        el.style.width = "10px";
-        el.style.height = "10px";
-        el.style.background = "#7EC8E3";
-        el.style.border = "1px solid #1B1730";
-        el.style.pointerEvents = "none";
-        const marker = new maplibregl.Marker({ element: el, anchor: "center" })
-          .setLngLat(randomPointInCell(cell))
-          .addTo(map);
-        decorationMarkersRef.current.push(marker);
+        const point = findSuitablePoint(cell, (p) => onLayers(p, buildingLayerIds));
+        addMarker(point, () => {
+          const el = document.createElement("div");
+          el.style.width = "10px";
+          el.style.height = "10px";
+          el.style.background = "#7EC8E3";
+          el.style.border = "1px solid #1B1730";
+          el.style.pointerEvents = "none";
+          return el;
+        });
+      }
+      for (let i = 0; i < greenspaceCount; i++) {
+        const point = findSuitablePoint(cell, (p) => onLayers(p, buildingLayerIds) || onLayers(p, roadLayerIds));
+        addMarker(point, () => {
+          const el = document.createElement("div");
+          el.style.width = "10px";
+          el.style.height = "10px";
+          el.style.borderRadius = "50%";
+          el.style.background = "#4C9A4A";
+          el.style.border = "1px solid #1B1730";
+          el.style.pointerEvents = "none";
+          return el;
+        });
+      }
+      for (let i = 0; i < calmCount; i++) {
+        const point = findSuitablePoint(cell, (p) => onLayers(p, roadLayerIds));
+        addMarker(point, () => {
+          const el = document.createElement("div");
+          el.style.width = "8px";
+          el.style.height = "8px";
+          el.style.background = "rgba(242,233,216,0.85)";
+          el.style.border = "1px dashed #6b5a3f";
+          el.style.pointerEvents = "none";
+          return el;
+        });
       }
     }
 
@@ -654,7 +728,7 @@ function MitigationSelectionLayer({
       for (const m of decorationMarkersRef.current) m.remove();
       decorationMarkersRef.current = [];
     };
-  }, [map, isLoaded, grid, selectedCellIds, interventions.trees, interventions.cool_roofs]);
+  }, [map, isLoaded, grid, selectedCellIds, interventions.trees, interventions.cool_roofs, interventions.reduce_built_up, interventions.reduce_traffic]);
 
   return null;
 }
