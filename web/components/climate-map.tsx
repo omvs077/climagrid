@@ -442,6 +442,7 @@ function MitigationSelectionLayer({
   selectedCellIds,
   onToggleCell,
   onRectangleSelect,
+  interventions,
 }: {
   active: boolean;
   mode: "cells" | "rectangle" | "ward";
@@ -449,6 +450,7 @@ function MitigationSelectionLayer({
   selectedCellIds: Set<string>;
   onToggleCell: (id: string) => void;
   onRectangleSelect: (ids: Set<string>) => void;
+  interventions: InterventionSettings;
 }) {
   const { map, isLoaded } = useMap();
   const dragStateRef = useRef<{ startX: number; startY: number; box: HTMLDivElement } | null>(null);
@@ -590,6 +592,70 @@ function MitigationSelectionLayer({
     }
   }, [map, isLoaded, grid, selectedCellIds]);
 
+  // Scatter decorative sprites on selected cells, scaled by intervention
+  // intensity. Only the two ADDITIVE interventions get a visual (trees,
+  // cool-roof accents) - reduce_built_up/reduce_traffic represent
+  // removing something, which doesn't have a clean add-a-sprite visual yet.
+  const decorationMarkersRef = useRef<maplibregl.Marker[]>([]);
+
+  useEffect(() => {
+    if (!map || !isLoaded || !grid) return;
+
+    for (const m of decorationMarkersRef.current) m.remove();
+    decorationMarkersRef.current = [];
+
+    const selected = grid.cells.filter((c) => selectedCellIds.has(c.grid_id));
+    const maxDecoratedCells = 60;
+    const step = selected.length > maxDecoratedCells ? Math.ceil(selected.length / maxDecoratedCells) : 1;
+    const cellsToDecorate = selected.filter((_, i) => i % step === 0);
+
+    const treeCount = Math.round((interventions.trees / 100) * 3);
+    const roofCount = Math.round((interventions.cool_roofs / 100) * 2);
+
+    function randomPointInCell(cell: GridCell): [number, number] {
+      const ring = cell.geometry.coordinates[0];
+      const lons = ring.map((p) => p[0]);
+      const lats = ring.map((p) => p[1]);
+      const minLon = Math.min(...lons);
+      const maxLon = Math.max(...lons);
+      const minLat = Math.min(...lats);
+      const maxLat = Math.max(...lats);
+      return [minLon + Math.random() * (maxLon - minLon), minLat + Math.random() * (maxLat - minLat)];
+    }
+
+    for (const cell of cellsToDecorate) {
+      for (let i = 0; i < treeCount; i++) {
+        const el = document.createElement("img");
+        el.src = Math.random() < 0.5 ? "/sprites/_curated/tree_teal.png" : "/sprites/_curated/tree_orange.png";
+        el.style.width = "16px";
+        el.style.height = "16px";
+        el.style.imageRendering = "pixelated";
+        el.style.pointerEvents = "none";
+        const marker = new maplibregl.Marker({ element: el, anchor: "center" })
+          .setLngLat(randomPointInCell(cell))
+          .addTo(map);
+        decorationMarkersRef.current.push(marker);
+      }
+      for (let i = 0; i < roofCount; i++) {
+        const el = document.createElement("div");
+        el.style.width = "10px";
+        el.style.height = "10px";
+        el.style.background = "#7EC8E3";
+        el.style.border = "1px solid #1B1730";
+        el.style.pointerEvents = "none";
+        const marker = new maplibregl.Marker({ element: el, anchor: "center" })
+          .setLngLat(randomPointInCell(cell))
+          .addTo(map);
+        decorationMarkersRef.current.push(marker);
+      }
+    }
+
+    return () => {
+      for (const m of decorationMarkersRef.current) m.remove();
+      decorationMarkersRef.current = [];
+    };
+  }, [map, isLoaded, grid, selectedCellIds, interventions.trees, interventions.cool_roofs]);
+
   return null;
 }
 
@@ -698,6 +764,13 @@ export function ClimateMap() {
   const [showVulnerability, setShowVulnerability] = useState(false);
   const [showHoverInfo, setShowHoverInfo] = useState(true);
   const [theme, setTheme] = useState<"light" | "dark">("dark");
+
+  // Drives the site's UI-chrome theme (globals.css :root vs .dark tokens).
+  // Separate from the map's own basemap/ramp choice above - this only
+  // toggles Tailwind's dark-mode class on the document.
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+  }, [theme]);
   const [showInfo, setShowInfo] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [mapBounds, setMapBounds] = useState<BoundsFilter | null>(null);
@@ -761,6 +834,7 @@ export function ClimateMap() {
               });
             }}
             onRectangleSelect={(ids) => setSelectedCellIds(ids)}
+            interventions={interventions}
           />
         </Map>
       </Card>

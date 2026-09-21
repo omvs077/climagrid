@@ -81,16 +81,36 @@ export function MitigationSimulator({
 
   if (!active) return null;
 
+  const hasSelection = selectedCellIds.size > 0;
   const hasAnyIntervention =
     interventions.trees > 0 ||
     interventions.cool_roofs > 0 ||
     interventions.reduce_built_up > 0 ||
     interventions.reduce_traffic > 0;
+  const isEffective = hasSelection && hasAnyIntervention;
 
-  const mascotSrc = hasAnyIntervention
+  const mascotSrc = isEffective
     ? "/sprites/_curated/character_1.png"
     : "/sprites/_curated/character_2.png";
-  const mascotAlt = hasAnyIntervention ? "Happy city mascot" : "Waiting city mascot";
+  const mascotAlt = isEffective ? "Happy city mascot" : "Waiting city mascot";
+
+  let mascotMessage: string;
+  if (!hasSelection) {
+    mascotMessage = hasAnyIntervention
+      ? "Nothing selected yet - use Click Cells, Draw Area, or Pick Ward to apply these changes."
+      : "Click Cells, Draw Area, or Pick Ward to choose where to explore changes.";
+  } else if (!hasAnyIntervention) {
+    mascotMessage = selectedCellIds.size + " cell" + (selectedCellIds.size === 1 ? "" : "s") + " ready - adjust the sliders below.";
+  } else {
+    const magnitude = Math.abs(summary.avgDelta);
+    if (magnitude < 1) {
+      mascotMessage = "A good start! Every bit of shade helps.";
+    } else if (magnitude < 2.5) {
+      mascotMessage = "Nice work! The city is cooling down.";
+    } else {
+      mascotMessage = "Amazing! You've transformed this neighborhood.";
+    }
+  }
 
   function updateIntervention(key: InterventionType, value: number) {
     onInterventionsChange({ ...interventions, [key]: value });
@@ -98,15 +118,13 @@ export function MitigationSimulator({
 
   const pixelFont = { fontFamily: "var(--font-pixel)" };
 
-
   return (
     <div
       data-sim-panel
-      className="fixed z-20 w-80 overflow-y-auto border-4 border-[#0f0d1a] p-4 shadow-2xl"
+      className="fixed z-20 w-80 overflow-y-auto border-4 border-black bg-card p-4 text-card-foreground shadow-2xl"
       style={{
         maxHeight: "calc(100vh - 6rem)",
-        background: "#1B1730",
-        boxShadow: "6px 6px 0 rgba(0,0,0,0.4), inset 0 0 0 2px #4C9A4A",
+        boxShadow: "6px 6px 0 rgba(0,0,0,0.4), inset 0 0 0 2px var(--primary)",
         left: dragPos ? dragPos.x + "px" : undefined,
         top: dragPos ? dragPos.y + "px" : "320px",
         right: dragPos ? undefined : "16px",
@@ -116,7 +134,7 @@ export function MitigationSimulator({
         className="mb-3 flex cursor-move items-start justify-between select-none"
         onMouseDown={handleDragStart}
       >
-        <h2 className="text-xs leading-relaxed text-[#F2E9D8]" style={pixelFont}>
+        <h2 className="text-xs leading-relaxed" style={pixelFont}>
           RESTORE THE CITY
         </h2>
         <button
@@ -125,7 +143,7 @@ export function MitigationSimulator({
             onClose();
           }}
           onMouseDown={(e) => e.stopPropagation()}
-          className="text-[#F2E9D8] hover:text-[#E85D4C]"
+          className="text-card-foreground hover:text-destructive"
           style={pixelFont}
           aria-label="Close"
         >
@@ -133,7 +151,7 @@ export function MitigationSimulator({
         </button>
       </div>
 
-      <div className="mb-4 flex items-center gap-3 border-2 border-[#4C9A4A] bg-[#241f3d] p-2">
+      <div className="mb-4 flex items-center gap-3 border-2 border-primary bg-muted p-2">
         <img
           src={mascotSrc}
           alt={mascotAlt}
@@ -141,15 +159,13 @@ export function MitigationSimulator({
           height={48}
           style={{ imageRendering: "pixelated" }}
         />
-        <p className="text-[10px] leading-relaxed text-[#F2E9D8]" style={pixelFont}>
-          {hasAnyIntervention
-            ? "Nice work! The city is cooling down."
-            : "Adjust the sliders below to explore changes."}
+        <p className="text-[10px] leading-relaxed" style={pixelFont}>
+          {mascotMessage}
         </p>
       </div>
 
       <div className="mb-4">
-        <span className="mb-1.5 block text-[10px] text-[#7EC8E3]" style={pixelFont}>
+        <span className="mb-1.5 block text-[10px] text-accent" style={pixelFont}>
           Selection Mode
         </span>
         <div className="grid grid-cols-3 gap-1">
@@ -160,8 +176,8 @@ export function MitigationSimulator({
               className={
                 "border-2 px-2 py-1.5 text-[9px] leading-tight " +
                 (selectionMode === mode
-                  ? "border-[#7EC8E3] bg-[#2f2a4d] text-[#F2E9D8]"
-                  : "border-[#3a3560] bg-[#1B1730] text-[#8a86a8] hover:border-[#7EC8E3]/60")
+                  ? "border-accent bg-muted text-card-foreground"
+                  : "border-border bg-card text-muted-foreground hover:border-accent/60")
               }
               style={pixelFont}
             >
@@ -176,7 +192,7 @@ export function MitigationSimulator({
           <select
             value={selectedWardId ?? ""}
             onChange={(e) => onSelectWard(e.target.value || null)}
-            className="w-full border-2 border-[#3a3560] bg-[#1B1730] px-2 py-1.5 text-xs text-[#F2E9D8]"
+            className="w-full border-2 border-border bg-card px-2 py-1.5 text-xs text-card-foreground"
           >
             <option value="">Select a ward...</option>
             {wards.map((w) => (
@@ -189,11 +205,11 @@ export function MitigationSimulator({
       )}
 
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-[10px] text-[#8a86a8]">
+        <span className="text-[10px] text-muted-foreground">
           {selectedCellIds.size} cell{selectedCellIds.size === 1 ? "" : "s"} selected
         </span>
         {selectedCellIds.size > 0 && (
-          <button onClick={onClearSelection} className="text-[10px] text-[#E85D4C] underline">
+          <button onClick={onClearSelection} className="text-[10px] text-destructive underline">
             Clear
           </button>
         )}
@@ -215,13 +231,13 @@ export function MitigationSimulator({
           onChange={(v) => updateIntervention("trees", v)}
         />
         <InterventionSlider
-          icon={<Building size={20} color="#7EC8E3" />}
+          icon={<Building size={20} color="var(--accent)" />}
           label={INTERVENTION_LABELS.cool_roofs}
           value={interventions.cool_roofs}
           onChange={(v) => updateIntervention("cool_roofs", v)}
         />
         <InterventionSlider
-          icon={<Building size={20} color="#C97B4A" />}
+          icon={<Building size={20} color="var(--secondary)" />}
           label={INTERVENTION_LABELS.reduce_built_up}
           value={interventions.reduce_built_up}
           onChange={(v) => updateIntervention("reduce_built_up", v)}
@@ -242,7 +258,7 @@ export function MitigationSimulator({
         />
       </div>
 
-      <div className="border-2 border-[#C97B4A] bg-[#F2E9D8] p-3">
+      <div className="border-2 border-secondary bg-[#F2E9D8] p-3">
         <div className="text-[10px] uppercase tracking-wide text-[#6b5a3f]">Estimated cooling</div>
         <div className="text-xl font-semibold text-[#1B1730]">
           {summary.cellCount === 0
@@ -274,10 +290,10 @@ function InterventionSlider({
     <div>
       <div className="mb-1 flex items-center gap-2">
         {icon}
-        <span className="text-[10px] text-[#F2E9D8]" style={{ fontFamily: "var(--font-pixel)" }}>
+        <span className="text-[10px]" style={{ fontFamily: "var(--font-pixel)" }}>
           {label}
         </span>
-        <span className="ml-auto text-[10px] text-[#7EC8E3]">{value}%</span>
+        <span className="ml-auto text-[10px] text-accent">{value}%</span>
       </div>
       <input
         type="range"
@@ -286,7 +302,7 @@ function InterventionSlider({
         step={10}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-[#4C9A4A]"
+        className="w-full accent-[var(--primary)]"
       />
     </div>
   );
