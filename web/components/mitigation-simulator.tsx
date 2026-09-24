@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useRef, useCallback } from "react";
+import { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import type { ReactNode } from "react";
 import type { GridResponse, VulnerabilityWard } from "@/lib/api";
 import {
@@ -10,6 +10,7 @@ import {
   summarizeEstimates,
 } from "@/lib/mitigation";
 import { Building } from "@nsmr/pixelart-react";
+import { playBlip, playChime } from "@/lib/sound";
 
 export type SelectionMode = "cells" | "rectangle" | "ward";
 
@@ -78,6 +79,22 @@ export function MitigationSimulator({
     window.addEventListener("mousemove", handleMove);
     window.addEventListener("mouseup", handleUp);
   }, []);
+
+  // Chime once when a real change becomes effective (selection + a
+  // non-zero intervention), not on every slider tick.
+  const prevEffectiveRef = useRef(false);
+  useEffect(() => {
+    const currentlyEffective =
+      selectedCellIds.size > 0 &&
+      (interventions.trees > 0 ||
+        interventions.cool_roofs > 0 ||
+        interventions.reduce_built_up > 0 ||
+        interventions.reduce_traffic > 0);
+    if (currentlyEffective && !prevEffectiveRef.current) {
+      playChime();
+    }
+    prevEffectiveRef.current = currentlyEffective;
+  }, [selectedCellIds, interventions.trees, interventions.cool_roofs, interventions.reduce_built_up, interventions.reduce_traffic]);
 
   if (!active) return null;
 
@@ -301,7 +318,10 @@ function InterventionSlider({
         max={100}
         step={10}
         value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
+        onChange={(e) => {
+          onChange(Number(e.target.value));
+          playBlip();
+        }}
         className="w-full accent-[var(--primary)]"
       />
     </div>
