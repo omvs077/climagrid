@@ -1124,6 +1124,10 @@ export function ClimateMap() {
           setSelectedWardId(null);
         }}
         grid={grid}
+          onRestoreSelection={(ids) => {
+            setSelectedCellIds(new Set(ids));
+            setSelectedWardId(null);
+          }}
         wards={vulnerability?.wards ?? null}
         selectedWardId={selectedWardId}
         onSelectWard={(wardId) => {

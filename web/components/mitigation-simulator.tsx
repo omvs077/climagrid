@@ -21,6 +21,15 @@ const INTERVENTION_LABELS: Record<InterventionType, string> = {
   reduce_traffic: "Reduce Traffic",
 };
 
+type ScenarioSlot = "A" | "B" | "C";
+const SCENARIO_SLOTS: ScenarioSlot[] = ["A", "B", "C"];
+interface Scenario {
+  cellIds: string[];
+  interventions: InterventionSettings;
+  cellCount: number;
+  avgDelta: number | null;
+}
+
 export function MitigationSimulator({
   active,
   onClose,
@@ -34,6 +43,7 @@ export function MitigationSimulator({
   onSelectWard,
   interventions,
   onInterventionsChange,
+  onRestoreSelection,
 }: {
   active: boolean;
   onClose: () => void;
@@ -47,6 +57,7 @@ export function MitigationSimulator({
   onSelectWard: (wardId: string | null) => void;
   interventions: InterventionSettings;
   onInterventionsChange: (settings: InterventionSettings) => void;
+  onRestoreSelection: (ids: Set<string>) => void;
 }) {
   const selectedCells = useMemo(() => {
     if (!grid) return [];
@@ -57,6 +68,39 @@ export function MitigationSimulator({
     const estimates = estimateCells(selectedCells, interventions);
     return summarizeEstimates(estimates);
   }, [selectedCells, interventions]);
+
+  // Saved what-if scenarios (session-only; a refresh clears them).
+  const [scenarios, setScenarios] = useState<Record<ScenarioSlot, Scenario | null>>({ A: null, B: null, C: null });
+  const canSave =
+    selectedCellIds.size > 0 &&
+    (interventions.trees > 0 ||
+      interventions.cool_roofs > 0 ||
+      interventions.reduce_built_up > 0 ||
+      interventions.reduce_traffic > 0);
+  const savedDeltas = SCENARIO_SLOTS.map((s) => scenarios[s]?.avgDelta).filter((d): d is number => d != null);
+  const bestDelta = savedDeltas.length >= 2 ? Math.min(...savedDeltas) : null;
+
+  function saveScenario(slot: ScenarioSlot) {
+    if (!canSave) return;
+    setScenarios((prev) => ({
+      ...prev,
+      [slot]: {
+        cellIds: Array.from(selectedCellIds),
+        interventions: { ...interventions },
+        cellCount: selectedCellIds.size,
+        avgDelta: summary.avgBaselineLst !== null ? summary.avgDelta : null,
+      },
+    }));
+  }
+  function loadScenario(slot: ScenarioSlot) {
+    const s = scenarios[slot];
+    if (!s) return;
+    onRestoreSelection(new Set(s.cellIds));
+    onInterventionsChange({ ...s.interventions });
+  }
+  function clearScenario(slot: ScenarioSlot) {
+    setScenarios((prev) => ({ ...prev, [slot]: null }));
+  }
 
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
   const dragOffset = useRef<{ x: number; y: number } | null>(null);
@@ -286,6 +330,58 @@ export function MitigationSimulator({
           {summary.avgBaselineLst !== null
             ? summary.avgBaselineLst.toFixed(1) + "\u00b0C to " + (summary.avgEstimatedLst as number).toFixed(1) + "\u00b0C"
             : "Select cells to see an estimate"}
+        </div>
+      </div>
+
+      <div className="mt-4 border-2 border-border p-3">
+        <span className="mb-2 block text-[10px] text-accent" style={pixelFont}>
+          Scenarios
+        </span>
+        <div className="flex flex-col gap-2">
+          {SCENARIO_SLOTS.map((slot) => {
+            const s = scenarios[slot];
+            return (
+              <div key={slot} className="border border-border bg-muted p-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px]" style={pixelFont}>
+                    {slot}
+                    {s && bestDelta !== null && s.avgDelta === bestDelta ? " - BEST" : ""}
+                  </span>
+                  <div className="flex gap-2 text-[10px]">
+                    {s && (
+                      <button onClick={() => loadScenario(slot)} className="text-accent underline">
+                        Load
+                      </button>
+                    )}
+                    <button
+                      onClick={() => saveScenario(slot)}
+                      disabled={!canSave}
+                      className={"underline " + (canSave ? "text-card-foreground" : "text-muted-foreground opacity-50")}
+                    >
+                      Save here
+                    </button>
+                    {s && (
+                      <button onClick={() => clearScenario(slot)} className="text-destructive underline">
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {s ? (
+                  <div className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                    <div>
+                      {s.cellCount + " cells, " + (s.avgDelta !== null ? s.avgDelta.toFixed(1) + "\u00b0C avg" : "n/a")}
+                    </div>
+                    <div>
+                      {"Trees " + s.interventions.trees + "% | Roofs " + s.interventions.cool_roofs + "% | Built-up " + s.interventions.reduce_built_up + "% | Traffic " + s.interventions.reduce_traffic + "%"}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-1 text-[10px] text-muted-foreground">Empty</div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
