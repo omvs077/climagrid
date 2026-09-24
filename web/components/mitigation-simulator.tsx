@@ -11,7 +11,7 @@ import {
 } from "@/lib/mitigation";
 import { Building } from "@nsmr/pixelart-react";
 import { playBlip, playChime } from "@/lib/sound";
-import { composeSnapshot } from "@/lib/snapshot";
+import { composeSnapshot, type SnapshotDecoration } from "@/lib/snapshot";
 import { useToast } from "@/components/toast";
 
 export type SelectionMode = "cells" | "rectangle" | "ward";
@@ -61,7 +61,7 @@ export function MitigationSimulator({
   interventions: InterventionSettings;
   onInterventionsChange: (settings: InterventionSettings) => void;
   onRestoreSelection: (ids: Set<string>) => void;
-  onCaptureMap: () => HTMLCanvasElement | null;
+  onCaptureMap: () => { canvas: HTMLCanvasElement; decorations: SnapshotDecoration[] } | null;
 }) {
   const selectedCells = useMemo(() => {
     if (!grid) return [];
@@ -108,14 +108,16 @@ export function MitigationSimulator({
 
   const { showToast } = useToast();
   async function handleSnapshot() {
-    const mapCanvas = onCaptureMap();
-    if (!mapCanvas) {
+    const captured = onCaptureMap();
+    if (!captured) {
       showToast("The map isn't ready for a snapshot yet.", "error");
       return;
     }
+    const { canvas: mapCanvas, decorations } = captured;
     try {
       const applied = canSave && summary.avgBaselineLst !== null;
       const blob = await composeSnapshot({
+        decorations,
         mapCanvas,
         cellCount: summary.cellCount,
         avgDelta: applied ? summary.avgDelta : null,

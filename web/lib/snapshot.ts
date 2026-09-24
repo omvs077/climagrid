@@ -7,7 +7,14 @@ export interface SnapshotScenario {
   interventions: InterventionSettings;
 }
 
+export interface SnapshotDecoration {
+  kind: "tree_teal" | "tree_orange" | "roof" | "greenspace" | "calm";
+  x: number;
+  y: number;
+}
+
 export interface SnapshotData {
+  decorations: SnapshotDecoration[];
   mapCanvas: HTMLCanvasElement;
   cellCount: number;
   avgDelta: number | null;
@@ -33,7 +40,64 @@ function mixText(i: InterventionSettings): string {
 }
 
 /** Draws the current map view plus a stats card (cooling, slider mix, saved scenarios) into one PNG. */
-export function composeSnapshot(data: SnapshotData): Promise<Blob | null> {
+const spriteCache: Record<string, HTMLImageElement> = {};
+function loadSprite(src: string): Promise<HTMLImageElement> {
+  const cached = spriteCache[src];
+  if (cached) return Promise.resolve(cached);
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      spriteCache[src] = img;
+      resolve(img);
+    };
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+async function drawDecorations(ctx: CanvasRenderingContext2D, decorations: SnapshotDecoration[], scale: number) {
+  const needsTeal = decorations.some((d) => d.kind === "tree_teal");
+  const needsOrange = decorations.some((d) => d.kind === "tree_orange");
+  const treeTeal = needsTeal ? await loadSprite("/sprites/_curated/tree_teal.png") : null;
+  const treeOrange = needsOrange ? await loadSprite("/sprites/_curated/tree_orange.png") : null;
+  const treeSize = 16 * scale;
+  for (const d of decorations) {
+    const x = d.x * scale;
+    const y = d.y * scale;
+    if (d.kind === "tree_teal" && treeTeal) {
+      ctx.drawImage(treeTeal, x - treeSize / 2, y - treeSize / 2, treeSize, treeSize);
+    } else if (d.kind === "tree_orange" && treeOrange) {
+      ctx.drawImage(treeOrange, x - treeSize / 2, y - treeSize / 2, treeSize, treeSize);
+    } else if (d.kind === "roof") {
+      const s2 = 10 * scale;
+      ctx.fillStyle = "#7EC8E3";
+      ctx.strokeStyle = "#1B1730";
+      ctx.lineWidth = Math.max(1, scale);
+      ctx.fillRect(x - s2 / 2, y - s2 / 2, s2, s2);
+      ctx.strokeRect(x - s2 / 2, y - s2 / 2, s2, s2);
+    } else if (d.kind === "greenspace") {
+      const r = 5 * scale;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = "#4C9A4A";
+      ctx.fill();
+      ctx.strokeStyle = "#1B1730";
+      ctx.lineWidth = Math.max(1, scale);
+      ctx.stroke();
+    } else if (d.kind === "calm") {
+      const s2 = 8 * scale;
+      ctx.fillStyle = "rgba(242,233,216,0.85)";
+      ctx.fillRect(x - s2 / 2, y - s2 / 2, s2, s2);
+      ctx.setLineDash([2 * scale, 1.5 * scale]);
+      ctx.strokeStyle = "#6b5a3f";
+      ctx.lineWidth = Math.max(1, scale);
+      ctx.strokeRect(x - s2 / 2, y - s2 / 2, s2, s2);
+      ctx.setLineDash([]);
+    }
+  }
+}
+
+export async function composeSnapshot(data: SnapshotData): Promise<Blob | null> {
   const { mapCanvas } = data;
   const out = document.createElement("canvas");
   out.width = mapCanvas.width;
@@ -42,6 +106,11 @@ export function composeSnapshot(data: SnapshotData): Promise<Blob | null> {
   if (!ctx) return Promise.resolve(null);
 
   ctx.drawImage(mapCanvas, 0, 0);
+
+  const scale = mapCanvas.width / (mapCanvas.clientWidth || mapCanvas.width);
+  if (data.decorations.length > 0) {
+    await drawDecorations(ctx, data.decorations, scale);
+  }
 
   const s = Math.max(1, out.width / 1100);
   const pad = 14 * s;

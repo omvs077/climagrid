@@ -531,11 +531,11 @@ function buildCoolingMask(cells: GridCell[], rows: number, cols: number, bbox: [
 }
 
 /** Exposes the live map canvas to ClimateMap (which renders outside <Map>) for snapshot export. */
-function MapCanvasBridge({ captureRef }: { captureRef: { current: (() => HTMLCanvasElement | null) | null } }) {
+function MapCanvasBridge({ captureRef }: { captureRef: { current: MapCapture | null } }) {
   const { map } = useMap();
   useEffect(() => {
     if (!map) return;
-    captureRef.current = () => map.getCanvas();
+    captureRef.current = { getCanvas: () => map.getCanvas(), project: (lonLat) => map.project(lonLat) };
     return () => {
       captureRef.current = null;
     };
@@ -557,6 +557,16 @@ function cellCenter(cell: GridCell): [number, number] {
  * same nearest-centroid technique as HoverPopup since there is no
  * discrete clickable grid layer - just the smooth raster.
  */
+type DecorationKind = "tree_teal" | "tree_orange" | "roof" | "greenspace" | "calm";
+interface DecorationRecord {
+  lonLat: [number, number];
+  kind: DecorationKind;
+}
+interface MapCapture {
+  getCanvas: () => HTMLCanvasElement;
+  project: (lonLat: [number, number]) => { x: number; y: number };
+}
+
 function MitigationSelectionLayer({
   active,
   mode,
@@ -564,6 +574,7 @@ function MitigationSelectionLayer({
   selectedCellIds,
   onToggleCell,
   onRectangleSelect,
+  decorationRecordsRef,
   interventions,
 }: {
   active: boolean;
@@ -572,6 +583,7 @@ function MitigationSelectionLayer({
   selectedCellIds: Set<string>;
   onToggleCell: (id: string) => void;
   onRectangleSelect: (ids: Set<string>) => void;
+  decorationRecordsRef: { current: DecorationRecord[] };
   interventions: InterventionSettings;
 }) {
   const { map, isLoaded } = useMap();
@@ -727,6 +739,7 @@ function MitigationSelectionLayer({
 
     for (const m of decorationMarkersRef.current) m.remove();
     decorationMarkersRef.current = [];
+    decorationRecordsRef.current = [];
 
     const selected = grid.cells.filter((c) => selectedCellIds.has(c.grid_id));
     const maxDecoratedCells = 60;
@@ -787,19 +800,21 @@ function MitigationSelectionLayer({
       return candidates[0];
     }
 
-    function addMarker(point: [number, number], build: () => HTMLElement) {
+    function addMarker(point: [number, number], kind: DecorationKind, build: () => HTMLElement) {
       const marker = new maplibregl.Marker({ element: build(), anchor: "center" })
         .setLngLat(point)
         .addTo(map!);
       decorationMarkersRef.current.push(marker);
+      decorationRecordsRef.current.push({ lonLat: point, kind });
     }
 
     for (const cell of cellsToDecorate) {
       for (let i = 0; i < treeCount; i++) {
         const point = findSuitablePoint(cell, (p) => !onLayers(p, buildingLayerIds));
-        addMarker(point, () => {
+        const treeSprite: DecorationKind = Math.random() < 0.5 ? "tree_teal" : "tree_orange";
+        addMarker(point, treeSprite, () => {
           const el = document.createElement("img");
-          el.src = Math.random() < 0.5 ? "/sprites/_curated/tree_teal.png" : "/sprites/_curated/tree_orange.png";
+          el.src = treeSprite === "tree_teal" ? "/sprites/_curated/tree_teal.png" : "/sprites/_curated/tree_orange.png";
           el.style.width = "16px";
           el.style.height = "16px";
           el.style.imageRendering = "pixelated";
@@ -809,7 +824,7 @@ function MitigationSelectionLayer({
       }
       for (let i = 0; i < roofCount; i++) {
         const point = findSuitablePoint(cell, (p) => onLayers(p, buildingLayerIds));
-        addMarker(point, () => {
+        addMarker(point, "roof", () => {
           const el = document.createElement("div");
           el.style.width = "10px";
           el.style.height = "10px";
@@ -821,7 +836,7 @@ function MitigationSelectionLayer({
       }
       for (let i = 0; i < greenspaceCount; i++) {
         const point = findSuitablePoint(cell, (p) => onLayers(p, buildingLayerIds) || onLayers(p, roadLayerIds));
-        addMarker(point, () => {
+        addMarker(point, "greenspace", () => {
           const el = document.createElement("div");
           el.style.width = "10px";
           el.style.height = "10px";
@@ -834,7 +849,7 @@ function MitigationSelectionLayer({
       }
       for (let i = 0; i < calmCount; i++) {
         const point = findSuitablePoint(cell, (p) => onLayers(p, roadLayerIds));
-        addMarker(point, () => {
+        addMarker(point, "calm", () => {
           const el = document.createElement("div");
           el.style.width = "8px";
           el.style.height = "8px";
@@ -849,6 +864,7 @@ function MitigationSelectionLayer({
     return () => {
       for (const m of decorationMarkersRef.current) m.remove();
       decorationMarkersRef.current = [];
+      decorationRecordsRef.current = [];
     };
   }, [map, isLoaded, grid, selectedCellIds, interventions.trees, interventions.cool_roofs, interventions.reduce_built_up, interventions.reduce_traffic]);
 
@@ -991,7 +1007,8 @@ export function ClimateMap() {
     if (cooling <= 0) return null;
     return { cells: selectedRasterCells, cooling };
   }, [simulatorActive, selectedRasterCells, interventions]);
-  const mapCaptureRef = useRef<(() => HTMLCanvasElement | null) | null>(null);
+  const mapCaptureRef = useRef<MapCapture | null>(null);
+  const decorationRecordsRef = useRef<DecorationRecord[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1043,6 +1060,7 @@ export function ClimateMap() {
               });
             }}
             onRectangleSelect={(ids) => setSelectedCellIds(ids)}
+            decorationRecordsRef={decorationRecordsRef}
             interventions={interventions}
           />
         </Map>
@@ -1139,7 +1157,14 @@ export function ClimateMap() {
           setSelectedWardId(null);
         }}
         grid={grid}
-        onCaptureMap={() => mapCaptureRef.current?.() ?? null}
+        onCaptureMap={() => {
+          const bridge = mapCaptureRef.current;
+          if (!bridge) return null;
+          return {
+            canvas: bridge.getCanvas(),
+            decorations: decorationRecordsRef.current.map((d) => ({ kind: d.kind, ...bridge.project(d.lonLat) })),
+          };
+        }}
           onRestoreSelection={(ids) => {
             setSelectedCellIds(new Set(ids));
             setSelectedWardId(null);
