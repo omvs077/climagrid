@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useMemo, useEffect, useState, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Map, MapControls, useMap } from "@/components/ui/map";
@@ -14,6 +14,7 @@ import { useToast } from "@/components/toast";
 import { Spinner } from "@/components/spinner";
 import { AddressSearch } from "@/components/address-search";
 import { MitigationSimulator, type SelectionMode } from "@/components/mitigation-simulator";
+import { estimateCellDelta } from "@/lib/mitigation";
 import { DEFAULT_INTERVENTIONS, pointInWardGeometry, type InterventionSettings } from "@/lib/mitigation";
 import { ScreenZone } from "@/components/ui/screen-zone";
 import { type BoundsFilter } from "@/lib/export";
@@ -334,10 +335,14 @@ const RASTER_OPACITY: Record<MapTheme, number> = { dark: 0.62, light: 0.8 };
  * see HoverPopup for how exact per-location values are still surfaced
  * without a visible grid).
  */
-function RasterLayer({ layerId, city, theme, onLoadingChange }: { layerId: LayerId; city: string; theme: MapTheme; onLoadingChange: (loading: boolean) => void }) {
+function RasterLayer({ layerId, city, theme, overlay, onLoadingChange }: { layerId: LayerId; city: string; theme: MapTheme; overlay: RasterOverlay | null; onLoadingChange: (loading: boolean) => void }) {
   const { map, isLoaded } = useMap();
   const { showToast } = useToast();
+  const baseRef = useRef<{ layerId: LayerId; raster: RasterData } | null>(null);
+  const maskRef = useRef<{ cells: GridCell[]; raster: RasterData; mask: Float32Array } | null>(null);
+  const [rasterVersion, setRasterVersion] = useState(0);
 
+  // Fetch only when the layer/city/theme changes - slider drags never refetch.
   useEffect(() => {
     if (!map || !isLoaded) return;
 
@@ -346,54 +351,9 @@ function RasterLayer({ layerId, city, theme, onLoadingChange }: { layerId: Layer
 
     fetchRaster(city, layerId)
       .then((raster) => {
-        if (cancelled || !map) return;
-
-        const { rows, cols, bbox, values } = raster;
-        const [minLon, minLat, maxLon, maxLat] = bbox;
-
-        const canvas = document.createElement("canvas");
-        canvas.width = cols;
-        canvas.height = rows;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-
-        const imageData = ctx.createImageData(cols, rows);
-        for (let r = 0; r < rows; r++) {
-          for (let c = 0; c < cols; c++) {
-            const value = values[r * cols + c];
-            const [red, green, blue] = getColorForValue(layerId, value, theme);
-            const destRow = rows - 1 - r;
-            const idx = (destRow * cols + c) * 4;
-            imageData.data[idx] = red;
-            imageData.data[idx + 1] = green;
-            imageData.data[idx + 2] = blue;
-            imageData.data[idx + 3] = 230;
-          }
-        }
-        ctx.putImageData(imageData, 0, 0);
-
-        const dataUrl = canvas.toDataURL();
-        const coordinates: [[number, number], [number, number], [number, number], [number, number]] = [
-          [minLon, maxLat],
-          [maxLon, maxLat],
-          [maxLon, minLat],
-          [minLon, minLat],
-        ];
-
-        const existingSource = map.getSource(RASTER_SOURCE_ID) as maplibregl.ImageSource | undefined;
-        if (existingSource) {
-          existingSource.updateImage({ url: dataUrl, coordinates });
-        } else {
-          map.addSource(RASTER_SOURCE_ID, { type: "image", url: dataUrl, coordinates });
-          const beforeId = getFirstLabelLayerId(map);
-          map.addLayer(
-            { id: RASTER_IMAGE_LAYER_ID, type: "raster", source: RASTER_SOURCE_ID, paint: { "raster-opacity": RASTER_OPACITY[theme] } },
-            beforeId
-          );
-        }
-        if (map.getLayer(RASTER_IMAGE_LAYER_ID)) {
-          map.setPaintProperty(RASTER_IMAGE_LAYER_ID, "raster-opacity", RASTER_OPACITY[theme]);
-        }
+        if (cancelled) return;
+        baseRef.current = { layerId, raster };
+        setRasterVersion((v) => v + 1);
       })
       .catch((err) => {
         console.error("Failed to load raster:", err);
@@ -410,6 +370,85 @@ function RasterLayer({ layerId, city, theme, onLoadingChange }: { layerId: Layer
     };
   }, [map, isLoaded, layerId, city, theme]);
 
+  // Paint from the cached raster. Re-runs on overlay changes (slider drags,
+  // selection changes) and applies the cooling delta to selected cells.
+  useEffect(() => {
+    if (!map || !isLoaded) return;
+    const base = baseRef.current;
+    if (!base || base.layerId !== layerId) return;
+    const ov = overlay;
+
+    const frame = requestAnimationFrame(() => {
+      if (!map.isStyleLoaded()) return;
+      const { rows, cols, bbox, values } = base.raster;
+      const [minLon, minLat, maxLon, maxLat] = bbox;
+
+      let mask: Float32Array | null = null;
+      if (ov && layerId === "lst_celsius" && ov.cells.length > 0 && ov.cooling > 0) {
+        const cached = maskRef.current;
+        if (cached && cached.cells === ov.cells && cached.raster === base.raster) {
+          mask = cached.mask;
+        } else {
+          mask = buildCoolingMask(ov.cells, rows, cols, bbox);
+          maskRef.current = { cells: ov.cells, raster: base.raster, mask };
+        }
+      }
+      const cooling = ov ? ov.cooling : 0;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = cols;
+      canvas.height = rows;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      const imageData = ctx.createImageData(cols, rows);
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const i = r * cols + c;
+          const w = mask ? mask[i] : 0;
+          const value = values[i] - cooling * w;
+          const [red, green, blue] = getColorForValue(layerId, value, theme);
+          const destRow = rows - 1 - r;
+          const idx = (destRow * cols + c) * 4;
+          imageData.data[idx] = red;
+          imageData.data[idx + 1] = green;
+          imageData.data[idx + 2] = blue;
+          imageData.data[idx + 3] = 230;
+        }
+      }
+      ctx.putImageData(imageData, 0, 0);
+
+      const dataUrl = canvas.toDataURL();
+      const coordinates: [[number, number], [number, number], [number, number], [number, number]] = [
+        [minLon, maxLat],
+        [maxLon, maxLat],
+        [maxLon, minLat],
+        [minLon, minLat],
+      ];
+
+      try {
+        const existingSource = map.getSource(RASTER_SOURCE_ID) as maplibregl.ImageSource | undefined;
+        if (existingSource) {
+          existingSource.updateImage({ url: dataUrl, coordinates });
+        } else {
+          map.addSource(RASTER_SOURCE_ID, { type: "image", url: dataUrl, coordinates });
+          const beforeId = getFirstLabelLayerId(map);
+          map.addLayer(
+            { id: RASTER_IMAGE_LAYER_ID, type: "raster", source: RASTER_SOURCE_ID, paint: { "raster-opacity": RASTER_OPACITY[theme] } },
+            beforeId
+          );
+        }
+        if (map.getLayer(RASTER_IMAGE_LAYER_ID)) {
+          map.setPaintProperty(RASTER_IMAGE_LAYER_ID, "raster-opacity", RASTER_OPACITY[theme]);
+        }
+      } catch (err) {
+        console.error("Failed to paint raster:", err);
+      }
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [map, isLoaded, layerId, theme, overlay, rasterVersion]);
+
   useEffect(() => {
     return () => {
       if (!map) return;
@@ -419,6 +458,77 @@ function RasterLayer({ layerId, city, theme, onLoadingChange }: { layerId: Layer
   }, [map]);
 
   return null;
+}
+
+type RasterData = Awaited<ReturnType<typeof fetchRaster>>;
+
+/** Selected cells + the uniform cooling (degrees C, positive) the simulator applies to them. */
+export interface RasterOverlay {
+  cells: GridCell[];
+  cooling: number;
+}
+
+function boxBlur(src: Float32Array, rows: number, cols: number, radius: number): Float32Array {
+  const tmp = new Float32Array(src.length);
+  const out = new Float32Array(src.length);
+  const size = radius * 2 + 1;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      let sum = 0;
+      for (let k = -radius; k <= radius; k++) {
+        const cc = c + k;
+        if (cc >= 0 && cc < cols) sum += src[r * cols + cc];
+      }
+      tmp[r * cols + c] = sum / size;
+    }
+  }
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      let sum = 0;
+      for (let k = -radius; k <= radius; k++) {
+        const rr = r + k;
+        if (rr >= 0 && rr < rows) sum += tmp[rr * cols + c];
+      }
+      out[r * cols + c] = sum / size;
+    }
+  }
+  return out;
+}
+
+// Rasterizes the selected cells into a 0..1 weight mask (row 0 = south, same
+// as the raster values), then blurs it so the cooled patch blends into the
+// surrounding surface instead of showing hard cell squares. Blurring the
+// combined mask (not per-cell) keeps adjacent selected cells seamless.
+function buildCoolingMask(cells: GridCell[], rows: number, cols: number, bbox: [number, number, number, number]): Float32Array {
+  const [minLon, minLat, maxLon, maxLat] = bbox;
+  const mask = new Float32Array(rows * cols);
+  let radius = 1;
+  let first = true;
+  for (const cell of cells) {
+    const ring = cell.geometry.coordinates[0];
+    let cMinLon = Infinity;
+    let cMaxLon = -Infinity;
+    let cMinLat = Infinity;
+    let cMaxLat = -Infinity;
+    for (const pt of ring) {
+      if (pt[0] < cMinLon) cMinLon = pt[0];
+      if (pt[0] > cMaxLon) cMaxLon = pt[0];
+      if (pt[1] < cMinLat) cMinLat = pt[1];
+      if (pt[1] > cMaxLat) cMaxLat = pt[1];
+    }
+    const c0 = Math.max(0, Math.floor(((cMinLon - minLon) / (maxLon - minLon)) * cols));
+    const c1 = Math.min(cols - 1, Math.ceil(((cMaxLon - minLon) / (maxLon - minLon)) * cols) - 1);
+    const r0 = Math.max(0, Math.floor(((cMinLat - minLat) / (maxLat - minLat)) * rows));
+    const r1 = Math.min(rows - 1, Math.ceil(((cMaxLat - minLat) / (maxLat - minLat)) * rows) - 1);
+    if (first) {
+      radius = Math.max(1, Math.round(Math.min(c1 - c0 + 1, r1 - r0 + 1) * 0.25));
+      first = false;
+    }
+    for (let r = r0; r <= r1; r++) {
+      for (let c = c0; c <= c1; c++) mask[r * cols + c] = 1;
+    }
+  }
+  return boxBlur(boxBlur(mask, rows, cols, radius), rows, cols, radius);
 }
 
 function cellCenter(cell: GridCell): [number, number] {
@@ -859,6 +969,17 @@ export function ClimateMap() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const selectedRasterCells = useMemo(() => {
+    if (!grid) return [];
+    return grid.cells.filter((c) => selectedCellIds.has(c.grid_id) && c.lst_celsius !== null);
+  }, [grid, selectedCellIds]);
+  const rasterOverlay = useMemo<RasterOverlay | null>(() => {
+    if (!simulatorActive || selectedRasterCells.length === 0) return null;
+    const cooling = estimateCellDelta(interventions);
+    if (cooling <= 0) return null;
+    return { cells: selectedRasterCells, cooling };
+  }, [simulatorActive, selectedRasterCells, interventions]);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -885,7 +1006,7 @@ export function ClimateMap() {
       <Card className="h-full w-full p-0 overflow-hidden">
         <Map center={PUNE_CENTER} zoom={11.5} theme={theme} styles={MAP_STYLES}>
           <MapControls />
-          <RasterLayer layerId={activeLayer} city="pune" theme={theme} onLoadingChange={setRasterLoading} />
+          <RasterLayer layerId={activeLayer} city="pune" theme={theme} overlay={rasterOverlay} onLoadingChange={setRasterLoading} />
           <VulnerabilityLayer visible={showVulnerability} wards={vulnerability} theme={theme} />
           <HoverPopup enabled={showHoverInfo} grid={grid} showVulnerability={showVulnerability} />
           <BasemapEnhancer theme={theme} />
