@@ -86,7 +86,12 @@ export function composeSnapshot(data: SnapshotData): Promise<Blob | null> {
   }
 
   lines.push({
-    text: "Illustrative estimate, not a predictive model. Basemap \u00a9 OpenStreetMap contributors.",
+    text: "Illustrative estimate, not a predictive model.",
+    size: 9,
+    color: muted,
+  });
+  lines.push({
+    text: "Basemap: OpenFreeMap \u00a9 OpenMapTiles, data from OpenStreetMap.",
     size: 9,
     color: muted,
   });
