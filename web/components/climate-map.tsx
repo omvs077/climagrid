@@ -530,6 +530,19 @@ function buildCoolingMask(cells: GridCell[], rows: number, cols: number, bbox: [
   return boxBlur(boxBlur(mask, rows, cols, radius), rows, cols, radius);
 }
 
+/** Exposes the live map canvas to ClimateMap (which renders outside <Map>) for snapshot export. */
+function MapCanvasBridge({ captureRef }: { captureRef: { current: (() => HTMLCanvasElement | null) | null } }) {
+  const { map } = useMap();
+  useEffect(() => {
+    if (!map) return;
+    captureRef.current = () => map.getCanvas();
+    return () => {
+      captureRef.current = null;
+    };
+  }, [map, captureRef]);
+  return null;
+}
+
 function cellCenter(cell: GridCell): [number, number] {
   const ring = cell.geometry.coordinates[0];
   const lons = ring.map((p) => p[0]);
@@ -978,6 +991,7 @@ export function ClimateMap() {
     if (cooling <= 0) return null;
     return { cells: selectedRasterCells, cooling };
   }, [simulatorActive, selectedRasterCells, interventions]);
+  const mapCaptureRef = useRef<(() => HTMLCanvasElement | null) | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1006,6 +1020,7 @@ export function ClimateMap() {
         <Map center={PUNE_CENTER} zoom={11.5} theme={theme} styles={MAP_STYLES}>
           <MapControls />
           <RasterLayer layerId={activeLayer} city="pune" theme={theme} overlay={rasterOverlay} onLoadingChange={setRasterLoading} />
+          <MapCanvasBridge captureRef={mapCaptureRef} />
           <VulnerabilityLayer visible={showVulnerability} wards={vulnerability} theme={theme} />
           <HoverPopup enabled={showHoverInfo} grid={grid} showVulnerability={showVulnerability} />
           <BasemapEnhancer theme={theme} />
@@ -1124,6 +1139,7 @@ export function ClimateMap() {
           setSelectedWardId(null);
         }}
         grid={grid}
+        onCaptureMap={() => mapCaptureRef.current?.() ?? null}
           onRestoreSelection={(ids) => {
             setSelectedCellIds(new Set(ids));
             setSelectedWardId(null);

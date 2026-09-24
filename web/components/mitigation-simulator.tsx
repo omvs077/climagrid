@@ -11,6 +11,8 @@ import {
 } from "@/lib/mitigation";
 import { Building } from "@nsmr/pixelart-react";
 import { playBlip, playChime } from "@/lib/sound";
+import { composeSnapshot } from "@/lib/snapshot";
+import { useToast } from "@/components/toast";
 
 export type SelectionMode = "cells" | "rectangle" | "ward";
 
@@ -44,6 +46,7 @@ export function MitigationSimulator({
   interventions,
   onInterventionsChange,
   onRestoreSelection,
+  onCaptureMap,
 }: {
   active: boolean;
   onClose: () => void;
@@ -58,6 +61,7 @@ export function MitigationSimulator({
   interventions: InterventionSettings;
   onInterventionsChange: (settings: InterventionSettings) => void;
   onRestoreSelection: (ids: Set<string>) => void;
+  onCaptureMap: () => HTMLCanvasElement | null;
 }) {
   const selectedCells = useMemo(() => {
     if (!grid) return [];
@@ -100,6 +104,45 @@ export function MitigationSimulator({
   }
   function clearScenario(slot: ScenarioSlot) {
     setScenarios((prev) => ({ ...prev, [slot]: null }));
+  }
+
+  const { showToast } = useToast();
+  async function handleSnapshot() {
+    const mapCanvas = onCaptureMap();
+    if (!mapCanvas) {
+      showToast("The map isn't ready for a snapshot yet.", "error");
+      return;
+    }
+    try {
+      const applied = canSave && summary.avgBaselineLst !== null;
+      const blob = await composeSnapshot({
+        mapCanvas,
+        cellCount: summary.cellCount,
+        avgDelta: applied ? summary.avgDelta : null,
+        baselineLst: summary.avgBaselineLst,
+        estimatedLst: summary.avgEstimatedLst,
+        interventions,
+        scenarios: SCENARIO_SLOTS.filter((sl) => scenarios[sl] !== null).map((sl) => ({
+          slot: sl,
+          cellCount: scenarios[sl]!.cellCount,
+          avgDelta: scenarios[sl]!.avgDelta,
+          interventions: scenarios[sl]!.interventions,
+        })),
+      });
+      if (!blob) {
+        showToast("Couldn't create the snapshot image.", "error");
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "climagrid-snapshot.png";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      console.error("Snapshot failed:", err);
+      showToast("Couldn't create the snapshot image.", "error");
+    }
   }
 
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
@@ -333,6 +376,14 @@ export function MitigationSimulator({
         </div>
       </div>
 
+
+      <button
+        onClick={handleSnapshot}
+        className="mt-4 w-full border-2 border-accent bg-muted px-2 py-2 text-[10px] text-card-foreground hover:bg-accent/20"
+        style={pixelFont}
+      >
+        Save snapshot (PNG)
+      </button>
       <div className="mt-4 border-2 border-border p-3">
         <span className="mb-2 block text-[10px] text-accent" style={pixelFont}>
           Scenarios

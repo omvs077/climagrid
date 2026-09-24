@@ -191,7 +191,7 @@ type MapProps = {
   };
   /**
    * Use a transparent, tile-less basemap instead of the default Carto street
-   * basemap Ã¢â‚¬â€ a blank canvas. Used alone it renders nothing; add your own
+   * basemap ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â a blank canvas. Used alone it renders nothing; add your own
    * layers on top (`<MapGeoJSON>`, `<MapArc>`, markers, etc.). Ideal for data
    * visualizations (choropleths, arcs, dot maps).
    * Ignored when an explicit `styles` prop is provided.
@@ -298,6 +298,7 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
       container: containerRef.current,
       style: initialStyle,
       renderWorldCopies: false,
+      canvasContextAttributes: { preserveDrawingBuffer: true },
       attributionControl: {
         compact: true,
       },
@@ -1325,7 +1326,7 @@ const GEOJSON_DEFAULT_COLORS = {
 
 /**
  * Renders arbitrary GeoJSON as fill + outline layers on the map. Composes like
- * `MapRoute` / `MapArc` Ã¢â‚¬â€ drop it inside `<Map>` (typically with `blank`) for
+ * `MapRoute` / `MapArc` ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â drop it inside `<Map>` (typically with `blank`) for
  * choropleths and region/data maps. For full control over expressions and
  * multiple layers, manage layers directly via `useMap()` instead.
  */
@@ -1576,7 +1577,7 @@ type MapArcProps<T extends MapArcDatum = MapArcDatum> = {
   /**
    * How far each arc bows away from a straight line. `0` renders straight
    * lines; higher values bend further. Negative values bend to the opposite
-   * side. Arcs are computed as a quadratic BÃƒÂ©zier in lng/lat space; the
+   * side. Arcs are computed as a quadratic BÃƒÆ’Ã‚Â©zier in lng/lat space; the
    * destination longitude is unwrapped relative to the origin so that arcs
    * cross the antimeridian via the shorter great-circle direction. (default: 0.2)
    */
