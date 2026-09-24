@@ -379,7 +379,6 @@ function RasterLayer({ layerId, city, theme, overlay, onLoadingChange }: { layer
     const ov = overlay;
 
     const frame = requestAnimationFrame(() => {
-      if (!map.isStyleLoaded()) return;
       const { rows, cols, bbox, values } = base.raster;
       const [minLon, minLat, maxLon, maxLat] = bbox;
 
