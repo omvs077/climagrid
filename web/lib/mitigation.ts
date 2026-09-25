@@ -32,7 +32,7 @@ export interface CellEstimate {
  * Max cooling per intervention assumes that intervention applied at 100%
  * intensity across the entire selected area.
  */
-const MAX_COOLING_C: Record<InterventionType, number> = {
+export const MAX_COOLING_C: Record<InterventionType, number> = {
   trees: 1.8,
   cool_roofs: 2.0,
   reduce_built_up: 1.2,
@@ -42,6 +42,16 @@ const MAX_COOLING_C: Record<InterventionType, number> = {
 // Diminishing returns cap when stacking multiple interventions at once -
 // a fully "restored" cell doesn't cool indefinitely.
 const MAX_TOTAL_COOLING_C = 4.5;
+
+/** The intervention contributing most to the current cooling estimate, or null if none is active. */
+export function dominantIntervention(settings: InterventionSettings): InterventionType | null {
+  const weighted: [InterventionType, number][] = (Object.keys(MAX_COOLING_C) as InterventionType[]).map((k) => [
+    k,
+    (settings[k] / 100) * MAX_COOLING_C[k],
+  ]);
+  const [topType, topValue] = weighted.reduce((best, cur) => (cur[1] > best[1] ? cur : best));
+  return topValue > 0 ? topType : null;
+}
 
 export function estimateCellDelta(settings: InterventionSettings): number {
   const total =

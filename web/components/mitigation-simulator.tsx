@@ -12,6 +12,7 @@ import {
 import { Building } from "@nsmr/pixelart-react";
 import { playBlip, playChime } from "@/lib/sound";
 import { composeSnapshot, type SnapshotDecoration } from "@/lib/snapshot";
+import { pickBenchmark } from "@/lib/benchmarks";
 import { useToast } from "@/components/toast";
 
 export type SelectionMode = "cells" | "rectangle" | "ward";
@@ -72,6 +73,8 @@ export function MitigationSimulator({
     const estimates = estimateCells(selectedCells, interventions);
     return summarizeEstimates(estimates);
   }, [selectedCells, interventions]);
+
+  const benchmark = useMemo(() => pickBenchmark(interventions), [interventions]);
 
   // Saved what-if scenarios (session-only; a refresh clears them).
   const [scenarios, setScenarios] = useState<Record<ScenarioSlot, Scenario | null>>({ A: null, B: null, C: null });
@@ -376,6 +379,14 @@ export function MitigationSimulator({
             ? summary.avgBaselineLst.toFixed(1) + "\u00b0C to " + (summary.avgEstimatedLst as number).toFixed(1) + "\u00b0C"
             : "Select cells to see an estimate"}
         </div>
+        {summary.cellCount > 0 && summary.avgDelta !== 0 && benchmark && (
+          <div className="mt-2 border-t border-[#d8c9a8] pt-2 text-[9px] leading-relaxed text-[#6b5a3f]">
+            {"\u2248 " + benchmark.text}
+            <a href={benchmark.url} target="_blank" rel="noreferrer" className="ml-1 underline">
+              {"(" + benchmark.source + ")"}
+            </a>
+          </div>
+        )}
       </div>
 
 
