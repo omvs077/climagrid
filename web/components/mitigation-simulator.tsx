@@ -37,6 +37,7 @@ interface Scenario {
 export function MitigationSimulator({
   active,
   onClose,
+  onOpenChange,
   selectionMode,
   onSelectionModeChange,
   selectedCellIds,
@@ -53,6 +54,7 @@ export function MitigationSimulator({
 }: {
   active: boolean;
   onClose: () => void;
+  onOpenChange: (open: boolean) => void;
   selectionMode: SelectionMode;
   onSelectionModeChange: (mode: SelectionMode) => void;
   selectedCellIds: Set<string>;
@@ -153,27 +155,6 @@ export function MitigationSimulator({
     }
   }
 
-  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
-  const dragOffset = useRef<{ x: number; y: number } | null>(null);
-
-  const handleDragStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const panel = e.currentTarget.closest("[data-sim-panel]") as HTMLElement | null;
-    if (!panel) return;
-    const rect = panel.getBoundingClientRect();
-    dragOffset.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-
-    function handleMove(ev: MouseEvent) {
-      if (!dragOffset.current) return;
-      setDragPos({ x: ev.clientX - dragOffset.current.x, y: ev.clientY - dragOffset.current.y });
-    }
-    function handleUp() {
-      dragOffset.current = null;
-      window.removeEventListener("mousemove", handleMove);
-      window.removeEventListener("mouseup", handleUp);
-    }
-    window.addEventListener("mousemove", handleMove);
-    window.addEventListener("mouseup", handleUp);
-  }, []);
 
   // Chime once when a real change becomes effective (selection + a
   // non-zero intervention), not on every slider tick.
@@ -191,7 +172,6 @@ export function MitigationSimulator({
     prevEffectiveRef.current = currentlyEffective;
   }, [selectedCellIds, interventions.trees, interventions.cool_roofs, interventions.reduce_built_up, interventions.reduce_traffic]);
 
-  if (!active) return null;
 
   const hasSelection = selectedCellIds.size > 0;
   const hasAnyIntervention =
@@ -231,20 +211,29 @@ export function MitigationSimulator({
   const pixelFont = { fontFamily: "var(--font-pixel)" };
 
   return (
+    <>
+    <button
+      onClick={() => onOpenChange(!active)}
+      aria-label={active ? "Collapse mitigation simulator" : "Expand mitigation simulator"}
+      className={
+        "fixed top-1/2 z-20 flex h-16 w-7 -translate-y-1/2 flex-col items-center justify-center gap-1 border-2 border-black bg-primary text-primary-foreground shadow-lg transition-[right] duration-300 " +
+        (active ? "right-80" : "right-0")
+      }
+    >
+      <span className="block h-0.5 w-4 bg-current" />
+      <span className="block h-0.5 w-4 bg-current" />
+      <span className="block h-0.5 w-4 bg-current" />
+    </button>
+
     <div
       data-sim-panel
-      className="fixed z-20 w-80 overflow-y-auto border-4 border-black bg-card p-4 text-card-foreground shadow-2xl"
-      style={{
-        maxHeight: "calc(100vh - 6rem)",
-        boxShadow: "6px 6px 0 rgba(0,0,0,0.4), inset 0 0 0 2px var(--primary)",
-        left: dragPos ? dragPos.x + "px" : undefined,
-        top: dragPos ? dragPos.y + "px" : "320px",
-        right: dragPos ? undefined : "16px",
-      }}
+      className={
+        "fixed right-0 top-0 z-20 flex h-full w-80 max-w-[90vw] flex-col overflow-y-auto border-l-4 border-black bg-card p-4 text-card-foreground shadow-2xl transition-transform duration-300 " +
+        (active ? "translate-x-0" : "translate-x-full")
+      }
     >
       <div
-        className="mb-3 flex cursor-move items-start justify-between select-none"
-        onMouseDown={handleDragStart}
+        className="mb-3 flex items-start justify-between select-none"
       >
         <h2 className="text-xs leading-relaxed" style={pixelFont}>
           RESTORE THE CITY
@@ -476,6 +465,7 @@ export function MitigationSimulator({
         </div>
       </div>
     </div>
+    </>
   );
 }
 

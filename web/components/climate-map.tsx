@@ -1051,7 +1051,7 @@ export function ClimateMap() {
     <div className="relative h-full w-full">
       <Card className="h-full w-full p-0 overflow-hidden">
         <Map center={PUNE_CENTER} zoom={11.5} theme={theme} styles={MAP_STYLES}>
-          <MapControls />
+          <MapControls position="bottom-left" />
           <RasterLayer layerId={activeLayer} city="pune" theme={theme} overlay={rasterOverlay} onLoadingChange={setRasterLoading} />
           <MapCanvasBridge captureRef={mapCaptureRef} />
           <VulnerabilityLayer visible={showVulnerability} wards={vulnerability} theme={theme} />
@@ -1155,6 +1155,12 @@ export function ClimateMap() {
           </button>
         </div>
         </div>
+        <Legend
+          layerId={activeLayer}
+          unit={LAYER_DEFS.find((l) => l.id === activeLayer)?.unit ?? ""}
+          theme={theme}
+        />
+        {showVulnerability && <HviLegend domain={HVI_DOMAIN} colors={HVI_COLORS} />}
       </ScreenZone>
 
       {showInfo && <InfoPanel city="pune" onClose={() => setShowInfo(false)} />}
@@ -1165,6 +1171,7 @@ export function ClimateMap() {
       <MitigationSimulator
         active={simulatorActive}
         onClose={() => setSimulatorActive(false)}
+        onOpenChange={setSimulatorActive}
         selectionMode={selectionMode}
         onSelectionModeChange={setSelectionMode}
         selectedCellIds={selectedCellIds}
@@ -1212,20 +1219,14 @@ export function ClimateMap() {
         onInterventionsChange={setInterventions}
       />
 
-      <ScreenZone position="top-right">
-        {rasterLoading && (
+      {rasterLoading && (
+        <div className="pointer-events-none fixed inset-0 z-10 flex items-center justify-center">
           <div className="flex items-center gap-2 rounded-lg border bg-background/90 px-3 py-2 text-xs text-muted-foreground shadow-sm backdrop-blur">
             <Spinner className="h-3.5 w-3.5" />
             Updating heat map&hellip;
           </div>
-        )}
-        <Legend
-          layerId={activeLayer}
-          unit={LAYER_DEFS.find((l) => l.id === activeLayer)?.unit ?? ""}
-          theme={theme}
-        />
-        {showVulnerability && <HviLegend domain={HVI_DOMAIN} colors={HVI_COLORS} />}
-      </ScreenZone>
+        </div>
+      )}
 
       {loading && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-background/70 backdrop-blur-sm">
