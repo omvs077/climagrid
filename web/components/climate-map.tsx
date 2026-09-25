@@ -16,6 +16,7 @@ import { AddressSearch } from "@/components/address-search";
 import { MitigationSimulator, type SelectionMode } from "@/components/mitigation-simulator";
 import { estimateCellDelta } from "@/lib/mitigation";
 import { DEFAULT_INTERVENTIONS, pointInWardGeometry, type InterventionSettings } from "@/lib/mitigation";
+import { rankWards, type WardBucket } from "@/lib/leaderboard";
 import { ScreenZone } from "@/components/ui/screen-zone";
 import { type BoundsFilter } from "@/lib/export";
 
@@ -1007,6 +1008,21 @@ export function ClimateMap() {
     if (cooling <= 0) return null;
     return { cells: selectedRasterCells, cooling };
   }, [simulatorActive, selectedRasterCells, interventions]);
+
+  // Bucket cell counts per ward once (point-in-polygon is O(cells x wards),
+  // so this only re-runs when the underlying data changes, not per slider tick).
+  const wardBuckets = useMemo<WardBucket[]>(() => {
+    if (!grid || !vulnerability) return [];
+    return vulnerability.wards.map((ward) => {
+      let cellCount = 0;
+      for (const cell of grid.cells) {
+        const [lon, lat] = cellCenter(cell);
+        if (pointInWardGeometry(lon, lat, ward.geometry)) cellCount++;
+      }
+      return { ward_id: ward.ward_id, hviScore: ward.hvi_score, cellCount };
+    });
+  }, [grid, vulnerability]);
+  const wardRankings = useMemo(() => rankWards(wardBuckets, interventions), [wardBuckets, interventions]);
   const mapCaptureRef = useRef<MapCapture | null>(null);
   const decorationRecordsRef = useRef<DecorationRecord[]>([]);
 
@@ -1170,6 +1186,7 @@ export function ClimateMap() {
             setSelectedWardId(null);
           }}
         wards={vulnerability?.wards ?? null}
+        wardRankings={wardRankings}
         selectedWardId={selectedWardId}
         onSelectWard={(wardId) => {
           setSelectedWardId(wardId);

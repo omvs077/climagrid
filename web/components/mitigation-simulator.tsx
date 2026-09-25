@@ -13,6 +13,7 @@ import { Building } from "@nsmr/pixelart-react";
 import { playBlip, playChime } from "@/lib/sound";
 import { composeSnapshot, type SnapshotDecoration } from "@/lib/snapshot";
 import { pickBenchmark } from "@/lib/benchmarks";
+import type { WardRanking } from "@/lib/leaderboard";
 import { useToast } from "@/components/toast";
 
 export type SelectionMode = "cells" | "rectangle" | "ward";
@@ -42,6 +43,7 @@ export function MitigationSimulator({
   onClearSelection,
   grid,
   wards,
+  wardRankings,
   selectedWardId,
   onSelectWard,
   interventions,
@@ -57,6 +59,7 @@ export function MitigationSimulator({
   onClearSelection: () => void;
   grid: GridResponse | null;
   wards: VulnerabilityWard[] | null;
+  wardRankings: WardRanking[];
   selectedWardId: string | null;
   onSelectWard: (wardId: string | null) => void;
   interventions: InterventionSettings;
@@ -296,6 +299,30 @@ export function MitigationSimulator({
         </div>
       </div>
 
+      {selectionMode === "ward" && wardRankings.length > 0 && (
+        <div className="mb-3 border-2 border-border bg-muted p-2">
+          <span className="mb-1.5 block text-[10px] text-accent" style={pixelFont}>
+            Priority wards - cooling benefit per unit effort
+          </span>
+          <div className="flex flex-col gap-1">
+            {wardRankings.slice(0, 5).map((w, i) => (
+              <button
+                key={w.ward_id}
+                onClick={() => onSelectWard(w.ward_id)}
+                className={
+                  "flex items-center justify-between border px-2 py-1 text-left text-[10px] " +
+                  (selectedWardId === w.ward_id
+                    ? "border-accent bg-card text-card-foreground"
+                    : "border-border bg-transparent text-muted-foreground hover:border-accent/60")
+                }
+              >
+                <span>{(i + 1) + ". " + w.ward_id}</span>
+                <span className="text-[9px]">{w.cellCount + " cells"}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {selectionMode === "ward" && wards && (
         <div className="mb-4">
           <select
