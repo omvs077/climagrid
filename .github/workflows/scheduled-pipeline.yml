@@ -35,4 +35,5 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DEMO_CITY: pune
-        run: python run.py --city pune --mock
+          GEE_SERVICE_ACCOUNT_JSON: ${{ secrets.GEE_SERVICE_ACCOUNT_JSON }}
+        run: python run.py --city pune

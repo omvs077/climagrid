@@ -1,6 +1,6 @@
 """
-ClimaGrid pipeline entry point. Scheduled job (GitHub Actions cron) — never
-internet-facing, only initiates outbound calls. See ARCHITECTURE.md §5.
+ClimaGrid pipeline entry point. Scheduled job (GitHub Actions cron) â€” never
+internet-facing, only initiates outbound calls. See ARCHITECTURE.md Â§5.
 
 Usage:
     python run.py --city pune
@@ -26,7 +26,7 @@ def run(city: str, force_mock: bool) -> None:
     bbox = config.get_bbox(city)
     use_mock_gee = force_mock or not config.GEE_SERVICE_ACCOUNT_JSON
     if use_mock_gee:
-        logger.info("No GEE credentials configured — using mock LST/NDVI data")
+        logger.info("No GEE credentials configured â€” using mock LST/NDVI data")
 
     cells = fusion.build_grid(bbox, config.GRID_CELL_SIZE_DEG)
     rows = max(c.row for c in cells) + 1
@@ -35,7 +35,7 @@ def run(city: str, force_mock: bool) -> None:
 
     sources_used = {}
 
-    lst_ndvi = gee.fetch_lst_ndvi(bbox, rows, cols, use_mock=use_mock_gee)
+    lst_ndvi = gee.fetch_lst_ndvi(cells, rows, cols, use_mock=use_mock_gee)
     sources_used["gee"] = "mock" if use_mock_gee else "live"
 
     osm_elements = overpass.fetch_osm_features(bbox)
@@ -64,7 +64,7 @@ def run(city: str, force_mock: bool) -> None:
     if rejected:
         logger.warning("%d/%d cells rejected by validation", rejected, len(cells))
     if not valid_cells:
-        raise RuntimeError("All grid cells failed validation — aborting write")
+        raise RuntimeError("All grid cells failed validation â€” aborting write")
 
     hvi_scores = fusion.compute_hvi(valid_cells)
     logger.info("Computed HVI for %d wards", len(hvi_scores))
