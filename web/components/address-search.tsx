@@ -107,6 +107,7 @@ export function AddressSearch() {
           onChange={(e) => handleChange(e.target.value)}
           onFocus={() => results.length > 0 && setIsOpen(true)}
           placeholder="Search an address in Pune..."
+          aria-label="Search an address in Pune"
           className="w-full rounded-lg border bg-background/95 px-3 py-2 text-sm shadow-sm backdrop-blur outline-none focus:ring-2 focus:ring-primary"
         />
         {isSearching && (
