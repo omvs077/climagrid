@@ -71,3 +71,21 @@ export function fetchMeta() {
 export function fetchRaster(city: string, layer: string) {
   return apiFetch<RasterResponse>(`/api/v1/raster?city=${encodeURIComponent(city)}&layer=${encodeURIComponent(layer)}`);
 }
+
+export interface EnvironmentResponse {
+  lat: number;
+  lon: number;
+  weather: { tempC: number | null; humidityPct: number | null; windKph: number | null; observedAt: string | null } | null;
+  aqi: { source: "cpcb" | "waqi"; aqi: number; category: string; dominantPollutant: string; stationName: string | null; attributions: { name: string; url?: string }[] } | null;
+  warning: { color: "red" | "orange" | "yellow"; message: string } | null;
+  fetchedAt: string;
+}
+
+export function fetchEnvironment(city: string, lat?: number, lon?: number) {
+  const params = new URLSearchParams({ city });
+  if (lat !== undefined && lon !== undefined) {
+    params.set("lat", lat.toFixed(4));
+    params.set("lon", lon.toFixed(4));
+  }
+  return apiFetch<EnvironmentResponse>(`/api/v1/environment?${params.toString()}`);
+}

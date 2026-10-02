@@ -15,6 +15,7 @@ import { Spinner } from "@/components/spinner";
 import { AddressSearch } from "@/components/address-search";
 import { MitigationSimulator, type SelectionMode } from "@/components/mitigation-simulator";
 import { estimateCellDelta } from "@/lib/mitigation";
+import { EnvironmentPanel } from "@/components/environment-panel";
 import { DEFAULT_INTERVENTIONS, pointInWardGeometry, type InterventionSettings } from "@/lib/mitigation";
 import { rankWards, type WardBucket } from "@/lib/leaderboard";
 import { ScreenZone } from "@/components/ui/screen-zone";
@@ -1161,6 +1162,13 @@ export function ClimateMap() {
           theme={theme}
         />
         {showVulnerability && <HviLegend domain={HVI_DOMAIN} colors={HVI_COLORS} />}
+      </ScreenZone>
+      <ScreenZone position="top-right">
+        <EnvironmentPanel
+          city="pune"
+          lat={mapBounds ? (mapBounds.south + mapBounds.north) / 2 : undefined}
+          lon={mapBounds ? (mapBounds.west + mapBounds.east) / 2 : undefined}
+        />
       </ScreenZone>
 
       {showInfo && <InfoPanel city="pune" onClose={() => setShowInfo(false)} />}

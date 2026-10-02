@@ -42,6 +42,15 @@ export const rasterLayerSchema = z.enum(["lst_celsius", "ndvi", "built_up_index"
   message: "layer must be one of lst_celsius, ndvi, built_up_index, traffic_density",
 });
 
+export const latLonSchema = z
+  .object({
+    lat: z.coerce.number().min(-90).max(90).optional(),
+    lon: z.coerce.number().min(-180).max(180).optional(),
+  })
+  .refine((v) => (v.lat === undefined) === (v.lon === undefined), {
+    message: "lat and lon must be provided together",
+  });
+
 export function errorResponse(code: string, message: string, status: number) {
   return Response.json({ error: { code, message } }, { status });
 }
