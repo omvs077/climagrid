@@ -100,7 +100,7 @@ export function AddressSearch() {
 
   return (
     <>
-      <div ref={containerRef} className="w-72">
+      <div ref={containerRef} className="w-[calc(100vw-2rem)] max-w-72">
         <input
           type="text"
           value={query}

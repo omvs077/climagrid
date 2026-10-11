@@ -208,7 +208,6 @@ export function MitigationSimulator({
     onInterventionsChange({ ...interventions, [key]: value });
   }
 
-  const pixelFont = { fontFamily: "var(--font-pixel)" };
 
   return (
     <>
@@ -228,14 +227,14 @@ export function MitigationSimulator({
     <div
       data-sim-panel
       className={
-        "fixed right-0 top-0 z-20 flex h-full w-80 max-w-[90vw] flex-col overflow-y-auto border-l-4 border-black bg-card p-4 text-card-foreground shadow-2xl transition-transform duration-300 " +
+        "fixed right-0 top-0 z-20 flex h-full w-full sm:w-80 sm:max-w-[90vw] flex-col overflow-y-auto border-l-4 border-black bg-card p-4 text-card-foreground shadow-2xl transition-transform duration-300 " +
         (active ? "translate-x-0" : "translate-x-full")
       }
     >
       <div
         className="mb-3 flex items-start justify-between select-none"
       >
-        <h2 className="text-xs leading-relaxed" style={pixelFont}>
+        <h2 className="text-xs leading-relaxed font-heading">
           RESTORE THE CITY
         </h2>
         <button
@@ -244,8 +243,7 @@ export function MitigationSimulator({
             onClose();
           }}
           onMouseDown={(e) => e.stopPropagation()}
-          className="text-card-foreground hover:text-destructive"
-          style={pixelFont}
+          className="text-card-foreground hover:text-destructive font-heading"
           aria-label="Close"
         >
           X
@@ -260,16 +258,16 @@ export function MitigationSimulator({
           height={48}
           style={{ imageRendering: "pixelated" }}
         />
-        <p className="text-[10px] leading-relaxed" style={pixelFont}>
+        <p className="text-[10px] leading-relaxed font-heading">
           {mascotMessage}
         </p>
       </div>
 
       <div className="mb-4">
-        <span className="mb-1.5 block text-[10px] text-accent" style={pixelFont}>
+        <span className="mb-1.5 block text-[10px] text-accent font-heading">
           Selection Mode
         </span>
-        <div className="grid grid-cols-3 gap-1">
+        <div className="grid grid-cols-3 gap-1 font-heading">
           {(["cells", "rectangle", "ward"] as SelectionMode[]).map((mode) => (
             <button
               key={mode}
@@ -280,7 +278,6 @@ export function MitigationSimulator({
                   ? "border-accent bg-muted text-card-foreground"
                   : "border-border bg-card text-muted-foreground hover:border-accent/60")
               }
-              style={pixelFont}
             >
               {mode === "cells" ? "Click Cells" : mode === "rectangle" ? "Draw Area" : "Pick Ward"}
             </button>
@@ -290,7 +287,7 @@ export function MitigationSimulator({
 
       {selectionMode === "ward" && wardRankings.length > 0 && (
         <div className="mb-3 border-2 border-border bg-muted p-2">
-          <span className="mb-1.5 block text-[10px] text-accent" style={pixelFont}>
+          <span className="mb-1.5 block text-[10px] text-accent font-heading">
             Priority wards - cooling benefit per unit effort
           </span>
           <div className="flex flex-col gap-1">
@@ -408,13 +405,12 @@ export function MitigationSimulator({
 
       <button
         onClick={handleSnapshot}
-        className="mt-4 w-full border-2 border-accent bg-muted px-2 py-2 text-[10px] text-card-foreground hover:bg-accent/20"
-        style={pixelFont}
+        className="mt-4 w-full border-2 border-accent bg-muted px-2 py-2 text-[10px] text-card-foreground hover:bg-accent/20 font-heading"
       >
         Save snapshot (PNG)
       </button>
       <div className="mt-4 border-2 border-border p-3">
-        <span className="mb-2 block text-[10px] text-accent" style={pixelFont}>
+        <span className="mb-2 block text-[10px] text-accent font-heading">
           Scenarios
         </span>
         <div className="flex flex-col gap-2">
@@ -423,7 +419,7 @@ export function MitigationSimulator({
             return (
               <div key={slot} className="border border-border bg-muted p-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px]" style={pixelFont}>
+                  <span className="text-[10px] font-heading">
                     {slot}
                     {s && bestDelta !== null && s.avgDelta === bestDelta ? " - BEST" : ""}
                   </span>

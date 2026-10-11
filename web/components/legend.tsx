@@ -18,7 +18,7 @@ export function Legend({ layerId, unit, theme }: { layerId: LayerId; unit: strin
   const fmt = (v: number) => (showUnit ? `${v}${unit}` : v.toString());
 
   return (
-    <div className="w-44 max-w-[calc(100vw-2rem)] rounded-lg border bg-background/90 p-3 shadow-sm backdrop-blur">
+    <div className="w-36 sm:w-44 max-w-[calc(100vw-2rem)] rounded-lg border bg-background/90 p-3 shadow-sm backdrop-blur">
       <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}</span>
       <GradientBar colors={colors} />
       <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
@@ -32,7 +32,7 @@ export function Legend({ layerId, unit, theme }: { layerId: LayerId; unit: strin
 
 export function HviLegend({ domain, colors }: { domain: [number, number, number]; colors: [string, string, string] }) {
   return (
-    <div className="w-44 max-w-[calc(100vw-2rem)] rounded-lg border bg-background/90 p-3 shadow-sm backdrop-blur">
+    <div className="w-36 sm:w-44 max-w-[calc(100vw-2rem)] rounded-lg border bg-background/90 p-3 shadow-sm backdrop-blur">
       <span className="mb-1 block text-xs font-medium text-muted-foreground">Ward Vulnerability (HVI)</span>
       <GradientBar colors={colors} />
       <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">

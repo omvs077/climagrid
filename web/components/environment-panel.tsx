@@ -69,7 +69,7 @@ export function EnvironmentPanel({ city, lat, lon }: { city: string; lat?: numbe
 
   if (loading && !data) {
     return (
-      <div className="flex w-56 max-w-[calc(100vw-2rem)] items-center gap-2 rounded-lg border bg-background/90 px-3 py-2 text-xs text-muted-foreground shadow-sm backdrop-blur">
+      <div className="flex w-48 sm:w-56 max-w-[calc(100vw-2rem)] items-center gap-2 rounded-lg border bg-background/90 px-3 py-2 text-xs text-muted-foreground shadow-sm backdrop-blur">
         <Spinner className="h-3.5 w-3.5" />
         Loading environment data&hellip;
       </div>
@@ -80,7 +80,7 @@ export function EnvironmentPanel({ city, lat, lon }: { city: string; lat?: numbe
   if (!data.weather && !data.aqi && !data.warning) return null;
 
   return (
-    <div className="w-56 max-w-[calc(100vw-2rem)] rounded-lg border bg-background/90 p-3 shadow-sm backdrop-blur">
+    <div className="w-48 sm:w-56 max-w-[calc(100vw-2rem)] rounded-lg border bg-background/90 p-3 shadow-sm backdrop-blur">
       <div className="mb-1.5 flex items-center gap-1.5">
         <span className="block text-xs font-medium text-muted-foreground">
           Environment - {city[0].toUpperCase() + city.slice(1)}

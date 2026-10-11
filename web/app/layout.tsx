@@ -1,11 +1,12 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono, Press_Start_2P } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Geist_Mono, Press_Start_2P, Silkscreen } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/toast";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const silkscreen = Silkscreen({
+  variable: "--font-sans",
   subsets: ["latin"],
+  weight: "400",
 });
 
 const geistMono = Geist_Mono({
@@ -18,6 +19,12 @@ const pressStart2P = Press_Start_2P({
   subsets: ["latin"],
   weight: "400",
 });
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+};
 
 export const metadata: Metadata = {
   title: "ClimaGrid - Pune Urban Heat Island Map",
@@ -37,7 +44,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${pressStart2P.variable} h-full antialiased`}
+      className={`${geistMono.variable} ${pressStart2P.variable} ${silkscreen.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col"><ToastProvider>{children}</ToastProvider></body>
     </html>
