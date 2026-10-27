@@ -7,6 +7,13 @@ import { Map, MapControls, useMap } from "@/components/ui/map";
 import { Card } from "@/components/ui/card";
 import { fetchGrid, fetchVulnerability, fetchRaster, type GridCell, type GridResponse, type VulnerabilityResponse } from "@/lib/api";
 import { getColorForValue, LAYER_DEFS, getWardFillOpacity, type LayerId, type MapTheme } from "@/lib/color-scales";
+
+const LAYER_ICONS: Record<LayerId, { icon: typeof Thermometer; color: string }> = {
+  lst_celsius: { icon: Thermometer, color: "text-destructive" },
+  ndvi: { icon: Leaf, color: "text-primary" },
+  built_up_index: { icon: Building2, color: "text-secondary" },
+  traffic_density: { icon: Car, color: "text-accent" },
+};
 import { Legend, HviLegend } from "@/components/legend";
 import { InfoPanel } from "@/components/info-panel";
 import { ExportDialog } from "@/components/export-dialog";
@@ -16,6 +23,7 @@ import { AddressSearch } from "@/components/address-search";
 import { MitigationSimulator, type SelectionMode } from "@/components/mitigation-simulator";
 import { estimateCellDelta } from "@/lib/mitigation";
 import { EnvironmentPanel } from "@/components/environment-panel";
+import { Thermometer, Leaf, Building2, Car, ShieldAlert, MousePointer2, Moon, Sun, WandSparkles, Info, Download } from "lucide-react";
 import { DEFAULT_INTERVENTIONS, pointInWardGeometry, type InterventionSettings } from "@/lib/mitigation";
 import { rankWards, type WardBucket } from "@/lib/leaderboard";
 import { ScreenZone } from "@/components/ui/screen-zone";
@@ -977,7 +985,7 @@ export function ClimateMap() {
   const [activeLayer, setActiveLayer] = useState<LayerId>("lst_celsius");
   const [showVulnerability, setShowVulnerability] = useState(false);
   const [showHoverInfo, setShowHoverInfo] = useState(true);
-  const [theme, setTheme] = useState<"light" | "dark">("dark");
+  const [theme, setTheme] = useState<"light" | "dark">("light");
 
   // Drives the site's UI-chrome theme (globals.css :root vs .dark tokens).
   // Separate from the map's own basemap/ramp choice above - this only
@@ -1086,17 +1094,21 @@ export function ClimateMap() {
       <ScreenZone position="top-left">
         <div className="flex flex-col gap-1 rounded-lg border bg-background/90 p-3 shadow-sm backdrop-blur">
         <span className="mb-1 text-xs font-medium text-muted-foreground">Layer</span>
-        {LAYER_DEFS.map((l) => (
-          <button
-            key={l.id}
-            onClick={() => setActiveLayer(l.id)}
-            className={`rounded px-2 py-1 text-left text-sm transition-colors ${
-              activeLayer === l.id ? "bg-primary text-primary-foreground" : "hover:bg-muted"
-            }`}
-          >
-            {l.label}
-          </button>
-        ))}
+        {LAYER_DEFS.map((l) => {
+          const { icon: LayerIcon, color } = LAYER_ICONS[l.id];
+          return (
+            <button
+              key={l.id}
+              onClick={() => setActiveLayer(l.id)}
+              className={`flex items-center gap-2 rounded px-2 py-1 text-left text-sm transition-colors ${
+                activeLayer === l.id ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+              }`}
+            >
+              <LayerIcon size={16} className={activeLayer === l.id ? "" : color} />
+              {l.label}
+            </button>
+          );
+        })}
 
         <div className="mt-2 border-t pt-2">
           <label className="flex items-center gap-2 text-sm">
@@ -1105,6 +1117,7 @@ export function ClimateMap() {
               checked={showVulnerability}
               onChange={(e) => setShowVulnerability(e.target.checked)}
             />
+            <ShieldAlert size={16} className="text-destructive" />
             Ward Vulnerability (HVI)
           </label>
         </div>
@@ -1116,6 +1129,7 @@ export function ClimateMap() {
               checked={showHoverInfo}
               onChange={(e) => setShowHoverInfo(e.target.checked)}
             />
+            <MousePointer2 size={16} className="text-muted-foreground" />
             Show details on hover
           </label>
         </div>
@@ -1123,8 +1137,9 @@ export function ClimateMap() {
         <div className="mt-2 border-t pt-2">
           <button
             onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-            className="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+            className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-muted"
           >
+            {theme === "dark" ? <Sun size={16} className="text-accent" /> : <Moon size={16} className="text-accent" />}
             {theme === "dark" ? "Switch to Light Map" : "Switch to Dark Map"}
           </button>
         </div>
@@ -1132,8 +1147,9 @@ export function ClimateMap() {
         <div className="mt-2 border-t pt-2">
           <button
             onClick={() => setSimulatorActive((a) => !a)}
-            className="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+            className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-muted"
           >
+            <WandSparkles size={16} className="text-gold" />
             {simulatorActive ? "Close Mitigation Simulator" : "Open Mitigation Simulator"}
           </button>
         </div>
@@ -1141,18 +1157,20 @@ export function ClimateMap() {
         <div className="mt-2 border-t pt-2">
           <button
             onClick={() => setShowInfo(true)}
-            className="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+            className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-muted"
           >
-            &#9432; About this data
+            <Info size={16} className="text-muted-foreground" />
+            About this data
           </button>
         </div>
 
         <div className="mt-2 border-t pt-2">
           <button
             onClick={() => setShowExport(true)}
-            className="w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+            className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-muted"
           >
-            &#8681; Export data
+            <Download size={16} className="text-muted-foreground" />
+            Export data
           </button>
         </div>
         </div>

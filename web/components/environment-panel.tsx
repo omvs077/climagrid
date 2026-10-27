@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchEnvironment, type EnvironmentResponse } from "@/lib/api";
 import { Spinner } from "@/components/spinner";
+import { CloudSun, TriangleAlert } from "lucide-react";
 
 const REFRESH_MS = 15 * 60 * 1000;
 const PAN_DEBOUNCE_MS = 2000;
@@ -82,6 +83,7 @@ export function EnvironmentPanel({ city, lat, lon }: { city: string; lat?: numbe
   return (
     <div className="w-48 sm:w-56 max-w-[calc(100vw-2rem)] rounded-lg border bg-background/90 p-3 shadow-sm backdrop-blur">
       <div className="mb-1.5 flex items-center gap-1.5">
+        <CloudSun size={14} className="text-accent" />
         <span className="block text-xs font-medium text-muted-foreground">
           Environment - {city[0].toUpperCase() + city.slice(1)}
         </span>
@@ -90,9 +92,10 @@ export function EnvironmentPanel({ city, lat, lon }: { city: string; lat?: numbe
 
       {data.warning && (
         <div
-          className="mb-2 rounded px-2 py-1 text-[11px] font-medium text-white"
+          className="mb-2 flex items-center gap-1.5 rounded px-2 py-1 text-[11px] font-medium text-white"
           style={{ backgroundColor: WARNING_COLORS[data.warning.color] }}
         >
+          <TriangleAlert size={14} className="shrink-0" />
           IMD {data.warning.color.toUpperCase()} alert: {data.warning.message}
         </div>
       )}
